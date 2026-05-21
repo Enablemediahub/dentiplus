@@ -96,13 +96,26 @@ export const NAVIGATION = {
       ],
     },
     {
+      title: 'Control Center',
+      items: [
+        { id: 'sales', label: 'Sales', navLabel: 'Sales Control', icon: 'trend' },
+        { id: 'expenses', label: 'Expenses', navLabel: 'Expense Control', icon: 'finance' },
+        { id: 'database', label: 'Database', navLabel: 'Platform Database', icon: 'layers' },
+      ],
+    },
+    {
       title: 'Operations',
       items: [
         { id: 'staff', label: 'Users & Staff', navLabel: 'Users & Staff', icon: 'briefcase' },
         { id: 'patients', label: 'Patients', navLabel: 'Patients', icon: 'patients' },
         { id: 'appointments', label: 'Appointments', navLabel: 'Appointments', icon: 'calendar' },
-        { id: 'billing', label: 'Billing', navLabel: 'Billing', icon: 'receipt' },
-        { id: 'reports', label: 'Reports', navLabel: 'Reports', icon: 'reports' },
+        { id: 'insurance', label: 'Insurance', navLabel: 'Insurance', icon: 'shield' },
+        { id: 'store', label: 'Store', navLabel: 'Store', icon: 'inventory' },
+      ],
+    },
+    {
+      title: 'System',
+      items: [
         { id: 'settings', label: 'Settings', navLabel: 'Settings', icon: 'settings' },
         { id: 'messages', label: 'Activity & Messages', navLabel: 'Activity & Messages', icon: 'message' },
       ],

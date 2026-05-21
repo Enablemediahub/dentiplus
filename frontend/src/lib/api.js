@@ -1,6 +1,21 @@
-const API_BASE =
+function buildHostedApiBase() {
+  if (typeof window === 'undefined') {
+    return 'http://127.0.0.1:8000/api/v1';
+  }
+
+  const { origin, hostname, port } = window.location;
+  const isLocalFrontend = (hostname === 'localhost' || hostname === '127.0.0.1') && port === '5176';
+  if (isLocalFrontend) {
+    return 'http://127.0.0.1:8000/api/v1';
+  }
+
+  return `${origin}/api/v1`;
+}
+
+const API_BASE = (
   import.meta.env.VITE_API_BASE_URL ??
-  'http://127.0.0.1:8000/api/v1';
+  buildHostedApiBase()
+).replace(/\/+$/, '');
 
 export const TOKEN_KEY = 'dentiplus-token';
 
@@ -76,6 +91,10 @@ export const api = {
   createProcedureCharge: (token, body) => request('/procedure-charges', { method: 'POST', token, body }),
   messages: (token) => request('/messages', { token }),
   staff: (token) => request('/staff', { token }),
+  createStaff: (token, body) => request('/staff', { method: 'POST', token, body }),
+  updateStaff: (token, body) => request('/staff/update', { method: 'POST', token, body }),
+  deleteStaff: (token, body) => request('/staff/delete', { method: 'POST', token, body }),
+  resetStaffPassword: (token, body) => request('/staff/reset-password', { method: 'POST', token, body }),
   settings: (token) => request('/settings', { token }),
   updateSettings: (token, body) => request('/settings', { method: 'POST', token, body }),
   store: (token) => request('/store', { token }),

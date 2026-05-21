@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  base: command === 'build' ? './' : '/',
   cacheDir: '.vite-cache',
   resolve: {
     preserveSymlinks: true,
@@ -15,4 +16,4 @@ export default defineConfig({
       overlay: false,
     },
   },
-});
+}));

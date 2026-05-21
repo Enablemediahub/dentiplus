@@ -8,6 +8,27 @@ function formatCurrency(value) {
   })}`;
 }
 
+function normalizeDateOnly(value) {
+  return String(value ?? '').slice(0, 10);
+}
+
+function inDateRange(value, startDate, endDate) {
+  const dateValue = normalizeDateOnly(value);
+  if (!dateValue) {
+    return false;
+  }
+
+  if (startDate && dateValue < startDate) {
+    return false;
+  }
+
+  if (endDate && dateValue > endDate) {
+    return false;
+  }
+
+  return true;
+}
+
 function clampPage(page, totalPages) {
   if (totalPages <= 0) {
     return 1;
@@ -42,6 +63,114 @@ function matchesBillFilters(item, billTypeFilter, statusFilter) {
   const normalizedStatus = String(item.status ?? '').toLowerCase().replace(/\s+/g, '_');
   const matchesStatus = statusFilter === 'all' || normalizedStatus === statusFilter;
   return matchesBillType && matchesStatus;
+}
+
+function matchesHistorySearch(item, query) {
+  const trimmed = query.trim().toLowerCase();
+  if (!trimmed) {
+    return true;
+  }
+
+  return [
+    item.receiptNumber,
+    item.bill,
+    item.patientName,
+    item.dentistName,
+    item.chargeSummary,
+    item.paymentMethod,
+    item.status,
+    item.totalAmountLabel,
+    item.remainingAmountLabel,
+  ].join(' ').toLowerCase().includes(trimmed);
+}
+
+function createExcelBlob(title, columns, rows) {
+  const tableRows = rows.map((row) => `
+    <tr>
+      ${row.map((cell) => `<td>${String(cell ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>`).join('')}
+    </tr>
+  `).join('');
+
+  const html = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+      <head>
+        <meta charset="utf-8" />
+        <title>${title}</title>
+      </head>
+      <body>
+        <table>
+          <thead>
+            <tr>${columns.map((column) => `<th>${column}</th>`).join('')}</tr>
+          </thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </body>
+    </html>
+  `;
+
+  return new Blob([html], { type: 'application/vnd.ms-excel' });
+}
+
+function downloadBlob(blob, fileName) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function openPrintableReport(title, subtitle, columns, rows, totals = []) {
+  const popup = window.open('', '_blank', 'width=1200,height=900');
+  if (!popup) {
+    return;
+  }
+
+  const head = columns.map((column) => `<th>${column}</th>`).join('');
+  const body = rows.map((row) => `
+    <tr>
+      ${row.map((cell) => `<td>${String(cell ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>`).join('')}
+    </tr>
+  `).join('');
+  const totalsMarkup = totals.map((line) => `<div class="totals-line"><span>${line.label}</span><strong>${line.value}</strong></div>`).join('');
+
+  popup.document.write(`
+    <!doctype html>
+    <html>
+      <head>
+        <title>${title}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 24px; color: #111; }
+          h1 { margin: 0 0 8px; }
+          p { margin: 0 0 20px; color: #555; }
+          table { width: 100%; border-collapse: collapse; }
+          th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; font-size: 13px; }
+          th { background: #f3f4f6; text-transform: uppercase; letter-spacing: 0.04em; font-size: 12px; }
+          .totals { margin-top: 18px; display: grid; gap: 8px; max-width: 420px; }
+          .totals-line { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+          .totals-line strong { font-size: 15px; }
+          @media print { body { margin: 16px; } }
+        </style>
+      </head>
+      <body>
+        <h1>${title}</h1>
+        <p>${subtitle}</p>
+        <table>
+          <thead><tr>${head}</tr></thead>
+          <tbody>${body || `<tr><td colspan="${columns.length}">No records in the selected range.</td></tr>`}</tbody>
+        </table>
+        <div class="totals">${totalsMarkup}</div>
+        <script>
+          window.onload = function () {
+            window.print();
+          };
+        </script>
+      </body>
+    </html>
+  `);
+  popup.document.close();
 }
 
 function printThermalReceipt(receipt) {
@@ -720,6 +849,8 @@ function PaymentProcessingModal({ bill, isOpen, onClose, onSubmit, onPaymentSave
 
 export function ReceptionPaymentsPage({
   billing,
+  dashboard,
+  insurance,
   onCreateBillingPayment,
   onCreateFrontdeskBill,
   onDeleteBilling,
@@ -727,10 +858,15 @@ export function ReceptionPaymentsPage({
   patients,
 }) {
   const [search, setSearch] = React.useState('');
+  const [methodFilter, setMethodFilter] = React.useState('all');
   const [billTypeFilter, setBillTypeFilter] = React.useState('all');
   const [statusFilter, setStatusFilter] = React.useState('all');
-  const [rowsPerPage, setRowsPerPage] = React.useState(15);
+  const [startDate, setStartDate] = React.useState('');
+  const [endDate, setEndDate] = React.useState('');
+  const [billRowsPerPage, setBillRowsPerPage] = React.useState(15);
+  const [historyRowsPerPage, setHistoryRowsPerPage] = React.useState(15);
   const [page, setPage] = React.useState(1);
+  const [historyPage, setHistoryPage] = React.useState(1);
   const [selectedBill, setSelectedBill] = React.useState(null);
   const [frontdeskModalOpen, setFrontdeskModalOpen] = React.useState(false);
   const [receiptModalOpen, setReceiptModalOpen] = React.useState(false);
@@ -741,18 +877,154 @@ export function ReceptionPaymentsPage({
 
   const items = billing?.items ?? [];
   const history = billing?.history ?? [];
-  const filteredItems = items.filter((item) => matchesSearch(item, search) && matchesBillFilters(item, billTypeFilter, statusFilter));
-  const totalPages = Math.max(1, Math.ceil(filteredItems.length / rowsPerPage));
+  const insuranceItems = insurance?.items ?? [];
+  const filteredHistory = history.filter((item) => {
+    const normalizedMethod = String(item.paymentMethod ?? '').toLowerCase();
+    const matchesMethod = methodFilter === 'all'
+      || (methodFilter === 'cash' && normalizedMethod.includes('cash'))
+      || (methodFilter === 'mobile_money' && normalizedMethod.includes('mobile money'))
+      || (methodFilter === 'paystack' && (normalizedMethod.includes('card') || normalizedMethod.includes('paystack')))
+      || (methodFilter === 'bank' && normalizedMethod.includes('bank'))
+      || (methodFilter === 'insurance' && normalizedMethod.includes('insurance'));
+
+    return matchesMethod
+      && inDateRange(item.paymentDate, startDate, endDate)
+      && matchesHistorySearch(item, search);
+  });
+  const rangeInsuranceTotal = insuranceItems.reduce((sum, item) => (
+    inDateRange(item.createdAt, startDate, endDate) ? sum + Number(item.coveredAmount ?? 0) : sum
+  ), 0);
+  const historyTotalPages = Math.max(1, Math.ceil(filteredHistory.length / historyRowsPerPage));
+  const currentHistoryPage = clampPage(historyPage, historyTotalPages);
+  const paginatedHistory = filteredHistory.slice((currentHistoryPage - 1) * historyRowsPerPage, currentHistoryPage * historyRowsPerPage);
+  const filteredItems = items.filter((item) => {
+    return matchesSearch(item, search)
+      && matchesBillFilters(item, billTypeFilter, statusFilter);
+  });
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / billRowsPerPage));
   const currentPage = clampPage(page, totalPages);
-  const paginatedItems = filteredItems.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+  const paginatedItems = filteredItems.slice((currentPage - 1) * billRowsPerPage, currentPage * billRowsPerPage);
+  const filteredSalesTotal = filteredHistory.reduce((sum, item) => sum + Number(item.paidAmount ?? 0), 0);
+  const filteredSalesBalance = filteredHistory.reduce((sum, item) => {
+    const numeric = Number.parseFloat(String(item.remainingAmountLabel ?? '0').replace(/[^0-9.-]/g, ''));
+    return sum + (Number.isFinite(numeric) ? numeric : 0);
+  }, 0);
+  const paymentMethodTotals = filteredHistory.reduce((totals, item) => {
+    const normalizedMethod = String(item.paymentMethod ?? '').toLowerCase();
+    const amount = Number(item.paidAmount ?? 0);
+
+    if (normalizedMethod.includes('cash')) {
+      totals.cash += amount;
+    }
+
+    if (normalizedMethod.includes('mobile money')) {
+      totals.mobileMoney += amount;
+    }
+
+    if (normalizedMethod.includes('paystack') || normalizedMethod.includes('card')) {
+      totals.paystack += amount;
+    }
+
+    if (normalizedMethod.includes('bank')) {
+      totals.bank += amount;
+    }
+
+    return totals;
+  }, {
+    cash: 0,
+    mobileMoney: 0,
+    paystack: 0,
+    bank: 0,
+  });
+  const filteredOpenBillBalance = filteredItems.reduce((sum, item) => sum + Number(item.balance ?? 0), 0);
+  const selectedRangeLabel = startDate || endDate
+    ? `${startDate || 'Beginning'} to ${endDate || 'Today'}`
+    : 'All available dates';
+
+  const salesWidgets = [
+    {
+      label: 'Sales In Range',
+      value: formatCurrency(filteredSalesTotal),
+      trend: selectedRangeLabel,
+      icon: 'trend',
+    },
+    {
+      label: 'Sales + Insurance',
+      value: formatCurrency(filteredSalesTotal + rangeInsuranceTotal),
+      trend: `Insurance in range ${formatCurrency(rangeInsuranceTotal)}`,
+      icon: 'shield',
+    },
+    {
+      label: 'Sales Records',
+      value: String(filteredHistory.length),
+      trend: 'Receipt rows inside the selected range',
+      icon: 'receipt',
+    },
+    {
+      label: 'Open-Bill Balance',
+      value: formatCurrency(filteredOpenBillBalance),
+      trend: 'Current open-bill balance matching the live bill filters',
+      icon: 'briefcase',
+    },
+  ];
 
   React.useEffect(() => {
     setPage(1);
-  }, [search, rowsPerPage, billTypeFilter, statusFilter]);
+  }, [search, billRowsPerPage, billTypeFilter, statusFilter]);
 
   React.useEffect(() => {
     setPage((current) => clampPage(current, totalPages));
   }, [totalPages]);
+
+  React.useEffect(() => {
+    setHistoryPage(1);
+  }, [search, methodFilter, historyRowsPerPage, startDate, endDate]);
+
+  React.useEffect(() => {
+    setHistoryPage((current) => clampPage(current, historyTotalPages));
+  }, [historyTotalPages]);
+
+  function exportSalesExcel() {
+    const rows = filteredHistory.map((item) => ([
+      item.receiptNumber,
+      item.bill,
+      item.patientName,
+      item.paymentMethod,
+      item.paidAmountLabel,
+      item.totalAmountLabel,
+      item.remainingAmountLabel,
+      item.dateLabel,
+    ]));
+
+    rows.push(['', '', '', 'TOTAL SALES', formatCurrency(filteredSalesTotal), '', formatCurrency(filteredSalesBalance), selectedRangeLabel]);
+
+    downloadBlob(
+      createExcelBlob('Dentiplus Sales Report', ['Receipt', 'Bill', 'Patient', 'Method', 'Paid', 'Total Bill', 'Balance', 'Date'], rows),
+      'dentiplus-sales-report.xls',
+    );
+  }
+
+  function exportSalesPdf() {
+    openPrintableReport(
+      'Dentiplus Sales Report',
+      `Range: ${selectedRangeLabel}`,
+      ['Receipt', 'Bill', 'Patient', 'Method', 'Paid', 'Total Bill', 'Balance', 'Date'],
+      filteredHistory.map((item) => [
+        item.receiptNumber,
+        item.bill,
+        item.patientName,
+        item.paymentMethod,
+        item.paidAmountLabel,
+        item.totalAmountLabel,
+        item.remainingAmountLabel,
+        item.dateLabel,
+      ]),
+      [
+        { label: 'Total Sales', value: formatCurrency(filteredSalesTotal) },
+        { label: 'Balance', value: formatCurrency(filteredSalesBalance) },
+      ],
+    );
+  }
 
   async function handleReprint(receiptNumber) {
     setReceiptLoading(true);
@@ -786,17 +1058,38 @@ export function ReceptionPaymentsPage({
 
   return (
     <>
+      <section className="stats-grid content-grid">
+        {salesWidgets.map((item) => (
+          <article className="stat-card" key={item.label}>
+            <div className="stat-card-icon">
+              <PortalIcon className="nav-icon stat-card-icon-svg" name={item.icon} />
+            </div>
+            <span className="stat-card__label">{item.label}</span>
+            <h3>{item.value}</h3>
+            <p className="stat-card__trend">{item.trend}</p>
+          </article>
+        ))}
+      </section>
+
       <section className="module-card reception-toolbar-card">
         <div className="panel-heading workspace-card__header">
           <div>
-            <p className="eyebrow">Payments and receipts</p>
-            <h3>Reception payment desk</h3>
-            <p>Process grouped dentist procedure bills, create consultation and registration charges, and print thermal receipts from one billing modal.</p>
+            <p className="eyebrow">Sales and receipts</p>
+            <h3>Accounting sales workspace</h3>
+            <p>Filter sales by date range, reconcile totals against the widgets, export the ledger, then move into open-bill follow-up only after reviewing booked sales.</p>
           </div>
           <div className="workspace-card__actions reception-action-row reception-action-row--end">
             <button className="primary-button workspace-inline-action" onClick={() => setFrontdeskModalOpen(true)} type="button">
               <PortalIcon className="workspace-submit-icon" name="plus-square" />
               <span>Consultation / registration bill</span>
+            </button>
+            <button className="ghost-button workspace-inline-action" onClick={exportSalesPdf} type="button">
+              <PortalIcon className="workspace-submit-icon" name="reports" />
+              <span>Export PDF</span>
+            </button>
+            <button className="ghost-button workspace-inline-action" onClick={exportSalesExcel} type="button">
+              <PortalIcon className="workspace-submit-icon" name="layers" />
+              <span>Export Excel</span>
             </button>
             <button className="ghost-button workspace-inline-action" onClick={() => setReceiptHistoryModalOpen(true)} type="button">
               <PortalIcon className="workspace-submit-icon" name="receipt" />
@@ -805,11 +1098,22 @@ export function ReceptionPaymentsPage({
           </div>
         </div>
 
-        <div className="reception-filter-strip">
+        <div className="reception-filter-strip reception-filter-strip--ledger">
           <label className="field-block reception-inline-field reception-search-field">
-            <span>Search open bills</span>
+            <span>Search sales page</span>
             <PortalIcon className="reception-search-icon" name="search" />
-            <input onChange={(event) => setSearch(event.target.value)} placeholder="Bill, patient, charge, dentist..." type="text" value={search} />
+            <input onChange={(event) => setSearch(event.target.value)} placeholder="Receipt, bill, patient, charge, dentist, method..." type="text" value={search} />
+          </label>
+          <label className="field-block reception-inline-field">
+            <span>Method</span>
+            <select onChange={(event) => setMethodFilter(event.target.value)} value={methodFilter}>
+              <option value="all">All methods</option>
+              <option value="cash">Cash</option>
+              <option value="mobile_money">Mobile Money</option>
+              <option value="paystack">Paystack</option>
+              <option value="bank">Bank</option>
+              <option value="insurance">Insurance</option>
+            </select>
           </label>
           <label className="field-block reception-inline-field">
             <span>Bill type</span>
@@ -828,8 +1132,24 @@ export function ReceptionPaymentsPage({
             </select>
           </label>
           <label className="field-block reception-inline-field">
-            <span>Rows per page</span>
-            <select value={rowsPerPage} onChange={(event) => setRowsPerPage(Number(event.target.value))}>
+            <span>Start date</span>
+            <input max={endDate || undefined} onChange={(event) => setStartDate(event.target.value)} type="date" value={startDate} />
+          </label>
+          <label className="field-block reception-inline-field">
+            <span>End date</span>
+            <input min={startDate || undefined} onChange={(event) => setEndDate(event.target.value)} type="date" value={endDate} />
+          </label>
+          <label className="field-block reception-inline-field">
+            <span>Open-bill rows</span>
+            <select value={billRowsPerPage} onChange={(event) => setBillRowsPerPage(Number(event.target.value))}>
+              <option value={15}>15</option>
+              <option value={30}>30</option>
+              <option value={45}>45</option>
+            </select>
+          </label>
+          <label className="field-block reception-inline-field">
+            <span>Sales rows</span>
+            <select value={historyRowsPerPage} onChange={(event) => setHistoryRowsPerPage(Number(event.target.value))}>
               <option value={15}>15</option>
               <option value={30}>30</option>
               <option value={45}>45</option>
@@ -840,23 +1160,93 @@ export function ReceptionPaymentsPage({
         <div className="frontdesk-command-grid">
           <div className="frontdesk-highlight">
             <span>Open bills</span>
-            <strong>{items.length}</strong>
-            <p>Pending or partially paid grouped bills waiting at reception.</p>
+            <strong>{filteredItems.length}</strong>
+            <p>Pending or partially paid grouped bills matching the current bill filters.</p>
           </div>
           <div className="frontdesk-highlight">
-            <span>Visible results</span>
-            <strong>{filteredItems.length}</strong>
-            <p>Open bills matching your current live search.</p>
+            <span>Total open bills</span>
+            <strong>{items.length}</strong>
+            <p>Current unpaid bill records still waiting for full settlement.</p>
+          </div>
+          <div className="frontdesk-highlight">
+            <span>Cash / MoMo / Paystack / Bank</span>
+            <strong>{formatCurrency(paymentMethodTotals.cash + paymentMethodTotals.mobileMoney + paymentMethodTotals.paystack + paymentMethodTotals.bank)}</strong>
+            <p>Pure sales channels combined inside the selected range.</p>
           </div>
           <div className="frontdesk-highlight">
             <span>Receipt history</span>
-            <strong>{history.length}</strong>
-            <p>Processed payments ready for reprint and branch desk follow-up.</p>
+            <strong>{filteredHistory.length}</strong>
+            <p>Processed payments inside the selected range, ready for reprint and follow-up.</p>
           </div>
-          <div className="frontdesk-highlight">
-            <span>Outstanding balance</span>
-            <strong>{formatCurrency(items.reduce((sum, item) => sum + Number(item.balance ?? 0), 0))}</strong>
-            <p>Total remaining open balance from both procedure and frontdesk fee bills.</p>
+        </div>
+      </section>
+
+      <section className="module-card">
+        <div className="panel-heading workspace-card__header">
+          <div>
+            <p className="eyebrow">Sales ledger</p>
+            <h3>Booked sales within range</h3>
+          </div>
+          <span className="table-counter">
+            {filteredHistory.length} results | Page {currentHistoryPage} of {historyTotalPages}
+          </span>
+        </div>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Receipt</th>
+                <th>Bill</th>
+                <th>Patient</th>
+                <th>Method</th>
+                <th>Paid</th>
+                <th>Total Bill</th>
+                <th>Balance</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedHistory.length ? paginatedHistory.map((item) => (
+                <tr key={`sales-history-${item.receiptNumber}`}>
+                  <td>{item.receiptNumber}</td>
+                  <td>{item.bill}</td>
+                  <td><strong>{item.patientName}</strong></td>
+                  <td>{item.paymentMethod}</td>
+                  <td><strong>{item.paidAmountLabel}</strong></td>
+                  <td>{item.totalAmountLabel}</td>
+                  <td className="table-balance-negative"><strong>{item.remainingAmountLabel}</strong></td>
+                  <td>{item.dateLabel}</td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan="8">No sales records match the current range and filters.</td>
+                </tr>
+              )}
+            </tbody>
+            <tfoot>
+              <tr className="table-total-row">
+                <td colSpan="4">Totals</td>
+                <td><strong>{formatCurrency(filteredSalesTotal)}</strong></td>
+                <td>-</td>
+                <td className="table-balance-negative"><strong>{formatCurrency(filteredSalesBalance)}</strong></td>
+                <td>{selectedRangeLabel}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <div className="table-pagination">
+          <span className="table-counter">
+            Showing {paginatedHistory.length ? (currentHistoryPage - 1) * historyRowsPerPage + 1 : 0}
+            {' - '}
+            {Math.min(currentHistoryPage * historyRowsPerPage, filteredHistory.length)} of {filteredHistory.length}
+          </span>
+          <div className="reception-action-row">
+            <button className="ghost-button secondary-action--compact" disabled={currentHistoryPage <= 1} onClick={() => setHistoryPage((value) => Math.max(1, value - 1))} type="button">
+              Previous
+            </button>
+            <button className="ghost-button secondary-action--compact" disabled={currentHistoryPage >= historyTotalPages} onClick={() => setHistoryPage((value) => Math.min(historyTotalPages, value + 1))} type="button">
+              Next
+            </button>
           </div>
         </div>
       </section>
@@ -865,7 +1255,7 @@ export function ReceptionPaymentsPage({
         <div className="panel-heading workspace-card__header">
           <div>
             <p className="eyebrow">Open bills</p>
-            <h3>Ready for payment</h3>
+            <h3>Ready for payment after ledger review</h3>
           </div>
           <span className="table-counter">
             {filteredItems.length} results | Page {currentPage} of {totalPages}
@@ -895,8 +1285,8 @@ export function ReceptionPaymentsPage({
                   </td>
                   <td>{item.chargeSummary}</td>
                   <td>{item.billTypeLabel}</td>
-                  <td>{item.amountLabel}</td>
-                  <td>{item.balanceLabel}</td>
+                  <td><strong>{item.amountLabel}</strong></td>
+                  <td className="table-balance-negative"><strong>{item.balanceLabel}</strong></td>
                   <td>{item.status}</td>
                   <td>
                     <div className="reception-action-row">
@@ -916,17 +1306,25 @@ export function ReceptionPaymentsPage({
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan="8">No open bills match the current search.</td>
+                  <td colSpan="8">No open bills match the current range and filters.</td>
                 </tr>
               )}
             </tbody>
+            <tfoot>
+              <tr className="table-total-row">
+                <td colSpan="4">Totals</td>
+                <td><strong>{formatCurrency(filteredItems.reduce((sum, item) => sum + Number(item.amount ?? 0), 0))}</strong></td>
+                <td className="table-balance-negative"><strong>{formatCurrency(filteredOpenBillBalance)}</strong></td>
+                <td colSpan="2">{selectedRangeLabel}</td>
+              </tr>
+            </tfoot>
           </table>
         </div>
         <div className="table-pagination">
           <span className="table-counter">
-            Showing {paginatedItems.length ? (currentPage - 1) * rowsPerPage + 1 : 0}
+            Showing {paginatedItems.length ? (currentPage - 1) * billRowsPerPage + 1 : 0}
             {' - '}
-            {Math.min(currentPage * rowsPerPage, filteredItems.length)} of {filteredItems.length}
+            {Math.min(currentPage * billRowsPerPage, filteredItems.length)} of {filteredItems.length}
           </span>
           <div className="reception-action-row">
             <button className="ghost-button secondary-action--compact" disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} type="button">

@@ -1,0 +1,23 @@
+Dentiplus Hostinger package
+
+Contents
+- app/
+- bootstrap/
+- public_html/
+- routes/
+- .env
+- .env.example
+- .env.hostinger.example
+
+Suggested upload flow
+1. Upload the PHP app folders in this package root directly into your Hostinger target folder.
+2. The compiled frontend is already inside public_html/ as index.html, assets/, favicon, and logos.
+3. .env is included as a production starter. Fill in DB_USERNAME and DB_PASSWORD before or after upload.
+4. .env.hostinger.example is included as a clean backup template if you want to start over.
+5. Point the domain or subfolder document root to this package's public_html/ folder whenever Hostinger allows it.
+6. If Hostinger points the domain to the package root instead, the package-level .htaccess and index.php now forward requests into public_html/.
+
+Notes
+- The package .env is generated from backend/.env.hostinger.example, not copied from your local machine.
+- No Node.js is needed on Hostinger. React is prebuilt and served as static files from public_html/.
+- The public_html/ folder is the only web root the server needs.

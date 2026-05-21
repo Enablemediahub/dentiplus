@@ -29,6 +29,10 @@ import { ReceptionStorePage } from './components/ReceptionStorePage';
 import { ProcedureChargePage } from './components/ProcedureChargePage';
 import { DentistDashboard } from './components/DentistDashboard';
 import { DentistPatientsPage } from './components/DentistPatientsPage';
+import { AdminAppointmentsPage } from './components/AdminAppointmentsPage';
+import { AdminStaffPage } from './components/AdminStaffPage';
+import { AdminDatabasePage } from './components/AdminDatabasePage';
+import { AdminDashboard } from './components/AdminDashboard';
 
 const THEME_KEY = 'edental-theme';
 
@@ -56,6 +60,148 @@ function useDentiplusPortal() {
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [currentView, setCurrentView] = useState(() => getInitialViewFromHash());
+
+  async function loadPortalBundle(activeToken, existingSession = null) {
+    const session = existingSession ?? await api.session(activeToken);
+    const role = normalizeRole(
+      session?.user?.staff_role ?? session?.user?.role,
+    );
+
+    if (role === 'admin') {
+      const [dashboard, settings, appointments, patients, billing, messages, expenses, insurance, store, staff, assignments] = await Promise.all([
+        api.dashboard(activeToken),
+        api.settings(activeToken),
+        api.appointments(activeToken),
+        api.patients(activeToken),
+        api.billing(activeToken),
+        api.messages(activeToken),
+        api.expenses(activeToken),
+        api.insurance(activeToken),
+        api.store(activeToken),
+        api.staff(activeToken),
+        api.assignments(activeToken),
+      ]);
+
+      return {
+        role,
+        session,
+        portalData: {
+          session,
+          settings,
+          dashboard,
+          appointments,
+          patients,
+          billing,
+          messages,
+          customerService: null,
+          expenses,
+          insurance,
+          store,
+          staff,
+        },
+        assignments,
+        procedureCharges: null,
+      };
+    }
+
+    if (role === 'receptionist') {
+      const [dashboard, appointments, patients, billing, messages, customerService, expenses, insurance, store, assignments] = await Promise.all([
+        api.dashboard(activeToken),
+        api.appointments(activeToken),
+        api.patients(activeToken),
+        api.billing(activeToken),
+        api.messages(activeToken),
+        api.customerService(activeToken),
+        api.expenses(activeToken),
+        api.insurance(activeToken),
+        api.store(activeToken),
+        api.assignments(activeToken),
+      ]);
+
+      return {
+        role,
+        session,
+        portalData: {
+          session,
+          settings: null,
+          dashboard,
+          appointments,
+          patients,
+          billing,
+          messages,
+          customerService,
+          expenses,
+          insurance,
+          store,
+          staff: null,
+        },
+        assignments,
+        procedureCharges: null,
+      };
+    }
+
+    if (role === 'dentist') {
+      const [dashboard, appointments, patients, billing, messages, assignments, procedureCharges] = await Promise.all([
+        api.dashboard(activeToken),
+        api.appointments(activeToken),
+        api.patients(activeToken),
+        api.billing(activeToken),
+        api.messages(activeToken),
+        api.assignments(activeToken),
+        api.procedureCharges(activeToken),
+      ]);
+
+      return {
+        role,
+        session,
+        portalData: {
+          session,
+          settings: null,
+          dashboard,
+          appointments,
+          patients,
+          billing,
+          messages,
+          customerService: null,
+          expenses: null,
+          insurance: null,
+          store: null,
+          staff: null,
+        },
+        assignments,
+        procedureCharges,
+      };
+    }
+
+    const [dashboard, billing, messages, expenses, insurance] = await Promise.all([
+      api.dashboard(activeToken),
+      api.billing(activeToken),
+      api.messages(activeToken),
+      api.expenses(activeToken),
+      api.insurance(activeToken),
+    ]);
+
+    return {
+      role,
+      session,
+      portalData: {
+        session,
+        settings: null,
+        dashboard,
+        appointments: null,
+        patients: null,
+        billing,
+        messages,
+        customerService: null,
+        expenses,
+        insurance,
+        store: null,
+        staff: null,
+      },
+      assignments: null,
+      procedureCharges: null,
+    };
+  }
 
   useEffect(() => {
     function handleHashChange() {
@@ -98,45 +244,15 @@ function useDentiplusPortal() {
 
       try {
         const session = await api.session(token);
-        const sessionRole = normalizeRole(
-          session?.user?.staff_role ?? session?.user?.role,
-        );
-        const [dashboard, settings, appointments, patients, billing, messages, customerService, expenses, insurance, store, staff, assignments, procedureCharges] = await Promise.all([
-          api.dashboard(token),
-          api.settings(token),
-          api.appointments(token),
-          api.patients(token),
-          api.billing(token),
-          api.messages(token),
-          api.customerService(token),
-          api.expenses(token),
-          api.insurance(token),
-          api.store(token),
-          api.staff(token),
-          api.assignments(token),
-          sessionRole === 'dentist' ? api.procedureCharges(token) : Promise.resolve(null),
-        ]);
+        const bundle = await loadPortalBundle(token, session);
 
         if (!active) {
           return;
         }
 
-        setPortalData({
-          session,
-          settings,
-          dashboard,
-          appointments,
-          patients,
-          billing,
-          messages,
-          customerService,
-          expenses,
-          insurance,
-          store,
-          staff,
-        });
-        setAssignmentsData(assignments);
-        setProcedureChargesData(procedureCharges);
+        setPortalData(bundle.portalData);
+        setAssignmentsData(bundle.assignments);
+        setProcedureChargesData(bundle.procedureCharges);
         setCurrentView(getInitialViewFromHash());
         setBootState('ready');
       } catch (error) {
@@ -199,11 +315,13 @@ function useDentiplusPortal() {
       return;
     }
 
-    const [dashboard, appointments, assignments, billing, procedureCharges] = await Promise.all([
+    const [dashboard, appointments, patients, assignments, billing, messages, procedureCharges] = await Promise.all([
       api.dashboard(activeToken),
       api.appointments(activeToken),
+      api.patients(activeToken),
       api.assignments(activeToken),
       api.billing(activeToken),
+      api.messages(activeToken),
       api.procedureCharges(activeToken),
     ]);
 
@@ -216,10 +334,24 @@ function useDentiplusPortal() {
             ...current,
             dashboard,
             appointments,
+            patients,
             billing,
+            messages,
           }
         : current
     ));
+  }
+
+  async function refreshAdminWorkspace(activeToken = token) {
+    if (!activeToken) {
+      return;
+    }
+
+    const bundle = await loadPortalBundle(activeToken);
+
+    setAssignmentsData(bundle.assignments);
+    setProcedureChargesData(bundle.procedureCharges);
+    setPortalData((current) => (current ? { ...current, ...bundle.portalData } : current));
   }
 
   async function handleLogin(credentials) {
@@ -629,6 +761,50 @@ function useDentiplusPortal() {
     return response;
   }
 
+  async function handleCreateStaff(values) {
+    if (!token) {
+      throw new Error('Sign in again before creating a staff account.');
+    }
+
+    const response = await api.createStaff(token, values);
+    await refreshAdminWorkspace(token);
+
+    return response;
+  }
+
+  async function handleUpdateStaff(values) {
+    if (!token) {
+      throw new Error('Sign in again before updating a staff account.');
+    }
+
+    const response = await api.updateStaff(token, values);
+    await refreshAdminWorkspace(token);
+
+    return response;
+  }
+
+  async function handleDeleteStaff(values) {
+    if (!token) {
+      throw new Error('Sign in again before deleting a staff account.');
+    }
+
+    const response = await api.deleteStaff(token, values);
+    await refreshAdminWorkspace(token);
+
+    return response;
+  }
+
+  async function handleResetStaffPassword(values) {
+    if (!token) {
+      throw new Error('Sign in again before resetting a staff password.');
+    }
+
+    const response = await api.resetStaffPassword(token, values);
+    await refreshAdminWorkspace(token);
+
+    return response;
+  }
+
   return {
     bootState,
     loginError,
@@ -671,6 +847,10 @@ function useDentiplusPortal() {
     handleCreateExpense,
     handleUpdateExpense,
     handleDeleteExpense,
+    handleCreateStaff,
+    handleUpdateStaff,
+    handleDeleteStaff,
+    handleResetStaffPassword,
     handleCreateStoreItem,
     handleUpdateStoreItem,
     handleDeleteStoreItem,
@@ -709,6 +889,10 @@ function AppWorkspace({
   onCreateExpense,
   onUpdateExpense,
   onDeleteExpense,
+  onCreateStaff,
+  onUpdateStaff,
+  onDeleteStaff,
+  onResetStaffPassword,
   onCreateStoreItem,
   onUpdateStoreItem,
   onDeleteStoreItem,
@@ -733,6 +917,7 @@ function AppWorkspace({
     name: portalData?.session?.user?.name ?? 'Clinic user',
     roleLabel: ROLE_LABELS[role],
     branch: portalData?.session?.user?.branch ?? branding?.clinicName ?? '',
+    profileImage: portalData?.session?.user?.profile_image ?? null,
   };
   const hero = HERO_COPY[role] ?? HERO_COPY.admin;
   const currentPage = navSections
@@ -788,6 +973,15 @@ function AppWorkspace({
           dashboard={portalData?.dashboard}
           procedureCharges={procedureChargesData}
         />
+      ) : role === 'admin' ? (
+        <AdminDashboard
+          appointmentsRows={appointmentsRows}
+          billingRows={billingRows}
+          dashboard={portalData?.dashboard}
+          onNavigate={setCurrentView}
+          patientsRows={patientsRows}
+          staffRows={staffRows}
+        />
       ) : (
         <>
           <StatGrid items={widgets} />
@@ -820,39 +1014,24 @@ function AppWorkspace({
         </>
       ),
     appointments: (
-      role === 'receptionist' ? (
+      role === 'admin' ? (
+        <AdminAppointmentsPage
+          appointments={portalData?.appointments}
+          onCreateAppointment={onCreateAppointment}
+          patients={portalData?.patients}
+        />
+      ) : role === 'receptionist' ? (
         <ReceptionAppointmentsPage
           appointments={portalData?.appointments}
           onCreateAppointment={onCreateAppointment}
           patients={portalData?.patients}
         />
       ) : (
-        <div className="workspace-grid workspace-grid--split">
-          <DataTable
-            title="Appointment board"
-            columns={[
-              { key: 'patient', label: 'Patient' },
-              { key: 'procedure', label: 'Procedure' },
-              { key: 'clinician', label: 'Clinician' },
-              { key: 'time', label: 'Time' },
-              { key: 'status', label: 'Status' },
-            ]}
-            rows={appointmentsRows}
-            actionLabel="Create slot"
-          />
-          <FormPanel
-            title="Book a new appointment"
-            description="This panel is positioned to feel operational, not like a detached modal stub."
-            fields={[
-              { label: 'Patient name', placeholder: 'Search or enter patient name' },
-              { label: 'Procedure', placeholder: 'Procedure or visit reason' },
-              { label: 'Appointment date', placeholder: 'Select date', type: 'date' },
-              { label: 'Appointment time', placeholder: 'Select time', type: 'time' },
-              { label: 'Notes', placeholder: 'Chair notes or visit instructions', type: 'textarea' },
-            ]}
-            actionLabel="Save appointment"
-          />
-        </div>
+        <AdminAppointmentsPage
+          appointments={portalData?.appointments}
+          onCreateAppointment={onCreateAppointment}
+          patients={portalData?.patients}
+        />
       )
     ),
     patients: (
@@ -867,63 +1046,42 @@ function AppWorkspace({
           onLoadPrescriptions={onLoadPrescriptions}
           patients={portalData?.patients}
         />
+      ) : role === 'admin' || role === 'receptionist' ? (
+        <ReceptionPatientDatabasePage
+          onDeletePatient={onDeletePatient}
+          onUpdatePatient={onUpdatePatient}
+          patients={portalData?.patients}
+        />
       ) : (
-        <div className="workspace-grid workspace-grid--split">
-          <DataTable
-            title="Patient register"
-            columns={[
-              { key: 'folder', label: 'Folder' },
-              { key: 'patient', label: 'Patient' },
-              { key: 'phone', label: 'Phone' },
-              { key: 'visitReason', label: 'Visit reason' },
-              { key: 'status', label: 'Status' },
-            ]}
-            rows={patientsRows}
-            actionLabel="Review patient"
-          />
-          <FormPanel
-            title="Register patient"
-            description="The form surface follows the same shell language as the rest of the portal so it does not feel raw."
-            fields={[
-              { label: 'First name', placeholder: 'Enter first name' },
-              { label: 'Last name', placeholder: 'Enter last name' },
-              { label: 'Phone', placeholder: '+233' },
-              { label: 'Email', placeholder: 'patient@example.com', type: 'email' },
-              { label: 'Visit reason', placeholder: 'Consultation, pain, review...' },
-              { label: 'Address', placeholder: 'Residential address', type: 'textarea' },
-            ]}
-            actionLabel="Create patient record"
-          />
-        </div>
+        <ReceptionPatientDatabasePage
+          onDeletePatient={onDeletePatient}
+          onUpdatePatient={onUpdatePatient}
+          patients={portalData?.patients}
+        />
       )
     ),
+    sales: (
+      <ReceptionPaymentsPage
+        billing={portalData?.billing}
+        dashboard={portalData?.dashboard}
+        insurance={portalData?.insurance}
+        onCreateFrontdeskBill={onCreateFrontdeskBill}
+        onCreateBillingPayment={onCreateBillingPayment}
+        onDeleteBilling={onDeleteBilling}
+        onLoadReceipt={onLoadReceipt}
+        patients={portalData?.patients}
+      />
+    ),
     billing: (
-      <div className="workspace-grid workspace-grid--split">
-        <DataTable
-          title="Billing and collections"
-          columns={[
-            { key: 'bill', label: 'Bill' },
-            { key: 'patient', label: 'Patient' },
-            { key: 'amount', label: 'Amount' },
-            { key: 'balance', label: 'Balance' },
-            { key: 'status', label: 'Status' },
-          ]}
-          rows={billingRows}
-          actionLabel="Open payment desk"
-        />
-        <FormPanel
-          title="Record payment handoff"
-          description="A finance-aware action block for cashiering, insurance routing, and billing follow-through."
-          fields={[
-            { label: 'Billing reference', placeholder: 'INV-2026-...' },
-            { label: 'Payment amount', placeholder: '0.00', type: 'number' },
-            { label: 'Payment method', placeholder: 'Cash, insurance, card...' },
-            { label: 'Transaction reference', placeholder: 'Optional reference code' },
-            { label: 'Notes', placeholder: 'Payment notes', type: 'textarea' },
-          ]}
-          actionLabel="Save payment"
-        />
-      </div>
+      <ReceptionPaymentsPage
+        billing={portalData?.billing}
+        insurance={portalData?.insurance}
+        onCreateFrontdeskBill={onCreateFrontdeskBill}
+        onCreateBillingPayment={onCreateBillingPayment}
+        onDeleteBilling={onDeleteBilling}
+        onLoadReceipt={onLoadReceipt}
+        patients={portalData?.patients}
+      />
     ),
     'assign-patient': (
       role === 'receptionist' ? (
@@ -1004,6 +1162,8 @@ function AppWorkspace({
       role === 'receptionist' ? (
         <ReceptionPaymentsPage
           billing={portalData?.billing}
+          dashboard={portalData?.dashboard}
+          insurance={portalData?.insurance}
           onCreateFrontdeskBill={onCreateFrontdeskBill}
           onCreateBillingPayment={onCreateBillingPayment}
           onDeleteBilling={onDeleteBilling}
@@ -1263,7 +1423,7 @@ function AppWorkspace({
       )
     ),
     expenses: (
-      role === 'receptionist' ? (
+      role === 'admin' || role === 'receptionist' ? (
         <ReceptionExpensesPage
           data={portalData?.expenses}
           onCreateExpense={onCreateExpense}
@@ -1271,21 +1431,16 @@ function AppWorkspace({
           onUpdateExpense={onUpdateExpense}
         />
       ) : (
-        <DataTable
-          title="Reception expenses"
-          columns={[
-            { key: 'reference', label: 'Reference' },
-            { key: 'detail', label: 'Detail' },
-            { key: 'amount', label: 'Amount' },
-            { key: 'period', label: 'Period' },
-          ]}
-          rows={expenseRows}
-          actionLabel="Log expense"
+        <ReceptionExpensesPage
+          data={portalData?.expenses}
+          onCreateExpense={onCreateExpense}
+          onDeleteExpense={onDeleteExpense}
+          onUpdateExpense={onUpdateExpense}
         />
       )
     ),
     store: (
-      role === 'receptionist' ? (
+      role === 'admin' || role === 'receptionist' ? (
         <ReceptionStorePage
           data={portalData?.store}
           onCreateStoreItem={onCreateStoreItem}
@@ -1333,16 +1488,26 @@ function AppWorkspace({
       </div>
     ),
     staff: (
-      <DataTable
-        title="Staff and role overview"
-        columns={[
-          { key: 'name', label: 'Name' },
-          { key: 'role', label: 'Role' },
-          { key: 'branch', label: 'Branch' },
-          { key: 'status', label: 'Status' },
-        ]}
-        rows={staffRows}
-        actionLabel="Manage staff"
+      <AdminStaffPage
+        currentUserId={portalData?.session?.user?.staff_id ?? null}
+        onCreateStaff={onCreateStaff}
+        onDeleteStaff={onDeleteStaff}
+        onNavigate={setCurrentView}
+        onResetStaffPassword={onResetStaffPassword}
+        staff={portalData?.staff}
+        onUpdateStaff={onUpdateStaff}
+      />
+    ),
+    database: (
+      <AdminDatabasePage
+        appointments={portalData?.appointments}
+        billing={portalData?.billing}
+        expenses={portalData?.expenses}
+        insurance={portalData?.insurance}
+        onNavigate={setCurrentView}
+        patients={portalData?.patients}
+        staff={portalData?.staff}
+        store={portalData?.store}
       />
     ),
     settings: role === 'admin' ? (
@@ -1444,6 +1609,10 @@ export default function App() {
     handleCreateExpense,
     handleUpdateExpense,
     handleDeleteExpense,
+    handleCreateStaff,
+    handleUpdateStaff,
+    handleDeleteStaff,
+    handleResetStaffPassword,
     handleCreateStoreItem,
     handleUpdateStoreItem,
     handleDeleteStoreItem,
@@ -1513,6 +1682,10 @@ export default function App() {
       onCreateExpense={handleCreateExpense}
       onUpdateExpense={handleUpdateExpense}
       onDeleteExpense={handleDeleteExpense}
+      onCreateStaff={handleCreateStaff}
+      onUpdateStaff={handleUpdateStaff}
+      onDeleteStaff={handleDeleteStaff}
+      onResetStaffPassword={handleResetStaffPassword}
       onCreateStoreItem={handleCreateStoreItem}
       onUpdateStoreItem={handleUpdateStoreItem}
       onDeleteStoreItem={handleDeleteStoreItem}

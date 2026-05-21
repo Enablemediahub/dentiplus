@@ -13,6 +13,104 @@ function normalizeLeadingUppercase(value) {
   return String(value ?? '').replace(/^([a-z])/, (match) => match.toUpperCase());
 }
 
+function normalizeDateOnly(value) {
+  return String(value ?? '').slice(0, 10);
+}
+
+function inDateRange(value, startDate, endDate) {
+  const dateValue = normalizeDateOnly(value);
+  if (!dateValue) {
+    return false;
+  }
+
+  if (startDate && dateValue < startDate) {
+    return false;
+  }
+
+  if (endDate && dateValue > endDate) {
+    return false;
+  }
+
+  return true;
+}
+
+function createExcelBlob(title, columns, rows) {
+  const tableRows = rows.map((row) => `
+    <tr>
+      ${row.map((cell) => `<td>${String(cell ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>`).join('')}
+    </tr>
+  `).join('');
+
+  const html = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+      <head><meta charset="utf-8" /><title>${title}</title></head>
+      <body>
+        <table>
+          <thead><tr>${columns.map((column) => `<th>${column}</th>`).join('')}</tr></thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </body>
+    </html>
+  `;
+
+  return new Blob([html], { type: 'application/vnd.ms-excel' });
+}
+
+function downloadBlob(blob, fileName) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function openPrintableReport(title, subtitle, columns, rows, totals = []) {
+  const popup = window.open('', '_blank', 'width=1200,height=900');
+  if (!popup) {
+    return;
+  }
+
+  popup.document.write(`
+    <!doctype html>
+    <html>
+      <head>
+        <title>${title}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 24px; color: #111; }
+          h1 { margin: 0 0 8px; }
+          p { margin: 0 0 20px; color: #555; }
+          table { width: 100%; border-collapse: collapse; }
+          th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; font-size: 13px; }
+          th { background: #f3f4f6; text-transform: uppercase; letter-spacing: 0.04em; font-size: 12px; }
+          .totals { margin-top: 18px; display: grid; gap: 8px; max-width: 420px; }
+          .totals-line { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+          .totals-line strong { font-size: 15px; }
+        </style>
+      </head>
+      <body>
+        <h1>${title}</h1>
+        <p>${subtitle}</p>
+        <table>
+          <thead><tr>${columns.map((column) => `<th>${column}</th>`).join('')}</tr></thead>
+          <tbody>
+            ${rows.map((row) => `
+              <tr>${row.map((cell) => `<td>${String(cell ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>`).join('')}</tr>
+            `).join('') || `<tr><td colspan="${columns.length}">No records in the selected range.</td></tr>`}
+          </tbody>
+        </table>
+        <div class="totals">
+          ${totals.map((line) => `<div class="totals-line"><span>${line.label}</span><strong>${line.value}</strong></div>`).join('')}
+        </div>
+        <script>window.onload = function () { window.print(); };</script>
+      </body>
+    </html>
+  `);
+  popup.document.close();
+}
+
 function matchesSearch(item, query) {
   const trimmed = query.trim().toLowerCase();
   if (!trimmed) {
@@ -94,7 +192,8 @@ function ExpenseModal({ deleting, feedback, form, isOpen, onChange, onClose, onD
 export function ReceptionExpensesPage({ data, onCreateExpense, onDeleteExpense, onUpdateExpense }) {
   const [search, setSearch] = React.useState('');
   const [categoryFilter, setCategoryFilter] = React.useState('all');
-  const [monthFilter, setMonthFilter] = React.useState('all');
+  const [startDate, setStartDate] = React.useState('');
+  const [endDate, setEndDate] = React.useState('');
   const [rowsPerPage, setRowsPerPage] = React.useState(15);
   const [page, setPage] = React.useState(1);
   const [form, setForm] = React.useState(null);
@@ -105,18 +204,27 @@ export function ReceptionExpensesPage({ data, onCreateExpense, onDeleteExpense, 
 
   const items = data?.items ?? [];
   const categories = Array.from(new Set(items.map((item) => item.category).filter(Boolean)));
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const selectedRangeLabel = startDate || endDate
+    ? `${startDate || 'Beginning'} to ${endDate || 'Today'}`
+    : 'All available dates';
   const filteredItems = items.filter((item) => {
     const matchesCategory = categoryFilter === 'all' || item.category === categoryFilter;
-    const matchesMonth = monthFilter === 'all' || String(item.expenseDate ?? '').slice(0, 7) === monthFilter;
-    return matchesCategory && matchesMonth && matchesSearch(item, search);
+    const matchesDates = inDateRange(item.expenseDate, startDate, endDate);
+    return matchesCategory && matchesDates && matchesSearch(item, search);
   });
+  const largestExpense = filteredItems.reduce((largest, item) => (Number(item.amount ?? 0) > Number(largest?.amount ?? 0) ? item : largest), null);
+  const todayItems = filteredItems.filter((item) => String(item.expenseDate ?? '') === todayKey);
+  const filteredTotal = filteredItems.reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
+  const todayTotal = todayItems.reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
+  const uniqueCategoriesInRange = new Set(filteredItems.map((item) => item.category).filter(Boolean)).size;
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / rowsPerPage));
   const currentPage = clampPage(page, totalPages);
   const paginatedItems = filteredItems.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
 
   React.useEffect(() => {
     setPage(1);
-  }, [search, categoryFilter, monthFilter, rowsPerPage]);
+  }, [search, categoryFilter, startDate, endDate, rowsPerPage]);
 
   React.useEffect(() => {
     setPage((current) => clampPage(current, totalPages));
@@ -202,23 +310,102 @@ export function ReceptionExpensesPage({ data, onCreateExpense, onDeleteExpense, 
     }
   }
 
+  function exportExpensesExcel() {
+    const rows = filteredItems.map((item) => ([
+      item.reference,
+      item.detail,
+      item.category,
+      item.amountLabel,
+      item.expenseDateLabel,
+      item.notes,
+    ]));
+
+    rows.push(['', 'TOTAL', '', `GHS ${filteredTotal.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, selectedRangeLabel, '']);
+
+    downloadBlob(
+      createExcelBlob('Dentiplus Expenses Report', ['Reference', 'Detail', 'Category', 'Amount', 'Date', 'Notes'], rows),
+      'dentiplus-expenses-report.xls',
+    );
+  }
+
+  function exportExpensesPdf() {
+    openPrintableReport(
+      'Dentiplus Expenses Report',
+      `Range: ${selectedRangeLabel}`,
+      ['Reference', 'Detail', 'Category', 'Amount', 'Date', 'Notes'],
+      filteredItems.map((item) => [
+        item.reference,
+        item.detail,
+        item.category,
+        item.amountLabel,
+        item.expenseDateLabel,
+        item.notes || '-',
+      ]),
+      [
+        { label: 'Total Expenses', value: `GHS ${filteredTotal.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      ],
+    );
+  }
+
   return (
     <>
+      <section className="stats-grid content-grid">
+        {[
+          {
+            label: 'Expenses In Range',
+            value: `GHS ${filteredTotal.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            trend: selectedRangeLabel,
+          },
+          {
+            label: 'Expenses Today',
+            value: `GHS ${todayTotal.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            trend: `${todayItems.length} expense ${todayItems.length === 1 ? 'entry' : 'entries'} from the active range fell on today`,
+          },
+          {
+            label: 'Visible Results',
+            value: String(filteredItems.length),
+            trend: `${uniqueCategoriesInRange} categories represented inside the selected range`,
+          },
+          {
+            label: 'Largest In Range',
+            value: largestExpense?.amountLabel ?? 'GHS 0.00',
+            trend: largestExpense?.detail ?? 'No expense records in the selected range',
+          },
+        ].map((item) => (
+          <article className="stat-card" key={item.label}>
+            <div className="stat-card-icon">
+              <PortalIcon className="nav-icon stat-card-icon-svg" name="finance" />
+            </div>
+            <span className="stat-card__label">{item.label}</span>
+            <h3>{item.value}</h3>
+            <p className="stat-card__trend">{item.trend}</p>
+          </article>
+        ))}
+      </section>
+
       <section className="module-card reception-toolbar-card">
         <div className="panel-heading workspace-card__header">
           <div>
             <p className="eyebrow">Expenses</p>
-            <h3>Reception expense log</h3>
-            <p>Record front-desk expenses, search the log, filter by category or month, and edit or delete entries when corrections are needed.</p>
+            <h3>Accounting expense workspace</h3>
+            <p>Review expenses by date range, keep the figures aligned with the widgets above, export the ledger, and then make edits only when needed.</p>
           </div>
           <div className="workspace-card__actions reception-action-row reception-action-row--end">
+            <button className="ghost-button workspace-inline-action" onClick={exportExpensesPdf} type="button">
+              <PortalIcon className="workspace-submit-icon" name="reports" />
+              <span>Export PDF</span>
+            </button>
+            <button className="ghost-button workspace-inline-action" onClick={exportExpensesExcel} type="button">
+              <PortalIcon className="workspace-submit-icon" name="layers" />
+              <span>Export Excel</span>
+            </button>
             <button className="primary-button workspace-inline-action" onClick={openNewExpense} type="button">
               <PortalIcon className="workspace-submit-icon" name="plus-square" />
               <span>Log expense</span>
             </button>
           </div>
         </div>
-        <div className="reception-filter-strip">
+        <div className="reception-filter-strip reception-filter-strip--expenses">
           <label className="field-block reception-inline-field reception-search-field">
             <span>Search expenses</span>
             <PortalIcon className="reception-search-icon" name="search" />
@@ -234,8 +421,12 @@ export function ReceptionExpensesPage({ data, onCreateExpense, onDeleteExpense, 
             </select>
           </label>
           <label className="field-block reception-inline-field">
-            <span>Month</span>
-            <input onChange={(event) => setMonthFilter(event.target.value || 'all')} type="month" value={monthFilter === 'all' ? '' : monthFilter} />
+            <span>Start date</span>
+            <input max={endDate || undefined} onChange={(event) => setStartDate(event.target.value)} type="date" value={startDate} />
+          </label>
+          <label className="field-block reception-inline-field">
+            <span>End date</span>
+            <input min={startDate || undefined} onChange={(event) => setEndDate(event.target.value)} type="date" value={endDate} />
           </label>
           <label className="field-block reception-inline-field">
             <span>Rows per page</span>
@@ -279,7 +470,7 @@ export function ReceptionExpensesPage({ data, onCreateExpense, onDeleteExpense, 
                     {item.notes ? <span className="table-subcopy">{item.notes}</span> : null}
                   </td>
                   <td>{item.category}</td>
-                  <td>{item.amountLabel}</td>
+                  <td><strong>{item.amountLabel}</strong></td>
                   <td>{item.expenseDateLabel}</td>
                   <td>
                     <button className="clinical-workspace-button secondary-action--compact" onClick={() => openEditExpense(item)} type="button">
@@ -293,6 +484,14 @@ export function ReceptionExpensesPage({ data, onCreateExpense, onDeleteExpense, 
                 </tr>
               )}
             </tbody>
+            <tfoot>
+              <tr className="table-total-row">
+                <td colSpan="3">Totals</td>
+                <td><strong>{`GHS ${filteredTotal.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</strong></td>
+                <td>{selectedRangeLabel}</td>
+                <td>-</td>
+              </tr>
+            </tfoot>
           </table>
         </div>
         <div className="table-pagination">

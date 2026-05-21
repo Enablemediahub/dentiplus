@@ -66,7 +66,11 @@ export function HeaderHero({ user, hero, branding, currentPageLabel, onToggleSid
                 type="button"
               >
                 <div className="profile-chip-avatar">
-                  <span className="profile-chip-initial">{user.name.slice(0, 1)}</span>
+                  {user.profileImage ? (
+                    <img alt={user.name} className="profile-chip-photo" src={user.profileImage} />
+                  ) : (
+                    <span className="profile-chip-initial">{user.name.slice(0, 1)}</span>
+                  )}
                 </div>
                 <div className="profile-chip-copy">
                   <strong>{String(user.name || '').split(' ')[0] || 'Profile'}</strong>

@@ -171,6 +171,22 @@ export function PortalIcon({ name, className = '' }) {
           <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L8 18l-4 1 1-4 11.5-11.5Z" />
         </svg>
       );
+    case 'eye':
+      return (
+        <svg {...commonProps}>
+          <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" />
+          <circle cx="12" cy="12" r="2.8" />
+        </svg>
+      );
+    case 'eye-off':
+      return (
+        <svg {...commonProps}>
+          <path d="M3 3l18 18" />
+          <path d="M10.6 6.3A11.8 11.8 0 0 1 12 6c6.5 0 10 6 10 6a18.7 18.7 0 0 1-3.2 4.1" />
+          <path d="M6.6 6.7C3.9 8.4 2 12 2 12s3.5 6 10 6a10.6 10.6 0 0 0 5.1-1.2" />
+          <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+        </svg>
+      );
     case 'sun':
       return (
         <svg {...commonProps}>
