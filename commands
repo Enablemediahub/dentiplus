@@ -1,0 +1,3 @@
+cd "c:\xampp\htdocs\dentiplus"
+powershell -ExecutionPolicy Bypass -File .\start-dentiplus.ps1
+powershell -ExecutionPolicy Bypass -File .\stop-dentiplus.ps1

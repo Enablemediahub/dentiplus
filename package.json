@@ -1,0 +1,9 @@
+{
+  "name": "dentiplus-workspace",
+  "private": true,
+  "scripts": {
+    "frontend": "npm --prefix frontend run dev",
+    "backend": "php -S 127.0.0.1:8000 -t backend/public backend/public/router.php",
+    "build": "npm --prefix frontend run build"
+  }
+}
