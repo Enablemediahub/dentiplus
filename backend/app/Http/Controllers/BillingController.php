@@ -12,6 +12,8 @@ use Throwable;
 
 final class BillingController extends Controller
 {
+    private array $procedureNameCache = [];
+
     public function index(): void
     {
         $user = $this->authUser();
@@ -160,6 +162,8 @@ final class BillingController extends Controller
         $validatedPayments = [];
         $totalPaidAmount = 0.0;
         $usesInsurance = false;
+        $insurancePaymentAmount = 0.0;
+        $insuranceLineCount = 0;
 
         foreach ($payments as $entry) {
             $method = strtolower(trim((string) ($entry['method'] ?? '')));
@@ -180,6 +184,8 @@ final class BillingController extends Controller
 
             if ($method === 'insurance') {
                 $usesInsurance = true;
+                $insurancePaymentAmount += $amount;
+                $insuranceLineCount++;
             }
 
             $validatedPayments[] = [
@@ -198,15 +204,15 @@ final class BillingController extends Controller
             Response::json(['message' => 'Total paid amount cannot exceed the remaining bill balance.'], 422);
         }
 
-        if ($status === 'completed' && abs($totalPaidAmount - $remainingAmount) > 0.01) {
-            Response::json(['message' => 'Completed payments must fully clear the remaining bill balance.'], 422);
-        }
-
-        if ($status === 'partially_paid' && ($totalPaidAmount <= 0 || $totalPaidAmount >= $remainingAmount)) {
-            Response::json(['message' => 'Partial payments must be greater than zero and below the remaining balance.'], 422);
+        if (in_array($status, ['completed', 'partially_paid'], true) && $totalPaidAmount <= 0) {
+            Response::json(['message' => 'Enter a payment amount greater than zero before issuing a receipt.'], 422);
         }
 
         if ($usesInsurance) {
+            if ($insuranceLineCount > 1) {
+                Response::json(['message' => 'Use only one insurance line, then add cash or Mobile Money as the second payment method if needed.'], 422);
+            }
+
             $insuranceType = trim((string) ($insurance['insurance_type'] ?? ''));
             $insuranceNumber = trim((string) ($insurance['insurance_number'] ?? ''));
             $expiryDate = trim((string) ($insurance['expiry_date'] ?? ''));
@@ -215,13 +221,21 @@ final class BillingController extends Controller
             if ($insuranceType === '' || $insuranceNumber === '' || $expiryDate === '' || $coveredAmount <= 0) {
                 Response::json(['message' => 'Insurance type, number, expiry date, and covered amount are required for insurance payments.'], 422);
             }
+
+            if (abs($insurancePaymentAmount - $coveredAmount) > 0.01) {
+                Response::json(['message' => 'The insurance payment line must match the covered amount for this split payment.'], 422);
+            }
         }
 
         $newRemainingAmount = max(0, round($remainingAmount - $totalPaidAmount, 2));
         $newStatus = $status === 'rejected'
             ? 'rejected'
             : ($newRemainingAmount > 0.009 ? 'partially_paid' : 'completed');
-        $receiptNumber = $this->nextReceiptNumber($pdo);
+        $nonInsurancePayments = array_values(array_filter(
+            $validatedPayments,
+            static fn (array $payment): bool => ($payment['method'] ?? '') !== 'insurance',
+        ));
+        $receiptNumber = ($usesInsurance || $nonInsurancePayments !== []) ? $this->nextReceiptNumber($pdo) : '';
 
         $pdo->beginTransaction();
 
@@ -240,7 +254,7 @@ final class BillingController extends Controller
                 'id' => $billingId,
             ]);
 
-            foreach ($validatedPayments as $payment) {
+            foreach ($nonInsurancePayments as $payment) {
                 $paymentInsert = $pdo->prepare(
                     'INSERT INTO payments (
                         billing_id,
@@ -258,7 +272,7 @@ final class BillingController extends Controller
                         :amount,
                         :payment_method,
                         :transaction_id,
-                        :payment_date,
+                        CURRENT_DATE,
                         :receptionist_id
                     )'
                 );
@@ -269,7 +283,6 @@ final class BillingController extends Controller
                     'amount' => $payment['amount'],
                     'payment_method' => $payment['method'],
                     'transaction_id' => $payment['transaction_id'],
-                    'payment_date' => date('Y-m-d'),
                     'receptionist_id' => $staffId > 0 ? $staffId : null,
                 ]);
 
@@ -285,14 +298,13 @@ final class BillingController extends Controller
                         :payment_id,
                         :billing_id,
                         :amount,
-                        :created_at
+                        CURRENT_TIMESTAMP
                     )'
                 );
                 $paymentsNewInsert->execute([
                     'payment_id' => $this->nextPaymentReference(),
                     'billing_id' => $billingId,
                     'amount' => $payment['amount'],
-                    'created_at' => date('Y-m-d H:i:s'),
                 ]);
 
                 $receiptInsert = $pdo->prepare(
@@ -312,7 +324,7 @@ final class BillingController extends Controller
                         :patient_id,
                         :receptionist_id,
                         :branch,
-                        :created_at,
+                        CURRENT_TIMESTAMP,
                         :patient_name
                     )'
                 );
@@ -323,7 +335,6 @@ final class BillingController extends Controller
                     'patient_id' => $billing['patient_id'] ? (int) $billing['patient_id'] : 0,
                     'receptionist_id' => $staffId > 0 ? $staffId : null,
                     'branch' => $branch !== '' ? $branch : ($billing['branch'] ?? null),
-                    'created_at' => date('Y-m-d H:i:s'),
                     'patient_name' => $billing['patient_name'] ?? null,
                 ]);
             }
@@ -332,6 +343,7 @@ final class BillingController extends Controller
                 $insuranceInsert = $pdo->prepare(
                     'INSERT INTO health_insurance (
                         billing_id,
+                        receipt_number,
                         patient_name,
                         insurance_type,
                         company,
@@ -342,6 +354,7 @@ final class BillingController extends Controller
                         insurance_covered_amount
                     ) VALUES (
                         :billing_id,
+                        :receipt_number,
                         :patient_name,
                         :insurance_type,
                         :company,
@@ -354,14 +367,47 @@ final class BillingController extends Controller
                 );
                 $insuranceInsert->execute([
                     'billing_id' => $billingId,
+                    'receipt_number' => $receiptNumber !== '' ? $receiptNumber : null,
                     'patient_name' => $billing['patient_name'] ?? 'Unknown patient',
                     'insurance_type' => trim((string) ($insurance['insurance_type'] ?? '')),
                     'company' => $this->nullableString($insurance['company'] ?? null),
                     'insurance_number' => trim((string) ($insurance['insurance_number'] ?? '')),
                     'insurance_category' => $this->nullableString($insurance['insurance_category'] ?? null),
                     'expiry_date' => trim((string) ($insurance['expiry_date'] ?? '')),
-                    'insurance_covered_amount' => round((float) ($insurance['insurance_covered_amount'] ?? 0), 2),
+                    'insurance_covered_amount' => $insurancePaymentAmount,
                 ]);
+
+                if ($nonInsurancePayments === [] && $receiptNumber !== '') {
+                    $insuranceReceiptInsert = $pdo->prepare(
+                        'INSERT INTO receipts (
+                            receipt_number,
+                            billing_id,
+                            payment_id,
+                            patient_id,
+                            receptionist_id,
+                            branch,
+                            created_at,
+                            patient_name
+                        ) VALUES (
+                            :receipt_number,
+                            :billing_id,
+                            NULL,
+                            :patient_id,
+                            :receptionist_id,
+                            :branch,
+                            CURRENT_TIMESTAMP,
+                            :patient_name
+                        )'
+                    );
+                    $insuranceReceiptInsert->execute([
+                        'receipt_number' => $receiptNumber,
+                        'billing_id' => $billingId,
+                        'patient_id' => $billing['patient_id'] ? (int) $billing['patient_id'] : 0,
+                        'receptionist_id' => $staffId > 0 ? $staffId : null,
+                        'branch' => $branch !== '' ? $branch : ($billing['branch'] ?? null),
+                        'patient_name' => $billing['patient_name'] ?? null,
+                    ]);
+                }
             }
 
             $pdo->commit();
@@ -372,7 +418,7 @@ final class BillingController extends Controller
 
         Response::json([
             'message' => 'Payment saved successfully.',
-            'receipt' => $this->receiptDetailsByNumber($pdo, $receiptNumber, $role, $staffId, $branch),
+            'receipt' => $receiptNumber !== '' ? $this->receiptDetailsByNumber($pdo, $receiptNumber, $role, $staffId, $branch) : null,
             'items' => $this->openBills($pdo, $role, $staffId, $branch),
             'history' => $this->paymentHistory($pdo, $role, $staffId, $branch),
         ]);
@@ -493,7 +539,7 @@ final class BillingController extends Controller
         $statement = $pdo->prepare($sql);
         $statement->execute($params);
 
-        return array_map(fn (array $row): array => $this->mapBillingRow($row), $statement->fetchAll(PDO::FETCH_ASSOC));
+        return array_map(fn (array $row): array => $this->mapBillingRow($pdo, $row), $statement->fetchAll(PDO::FETCH_ASSOC));
     }
 
     private function paymentHistory(PDO $pdo, string $role, int $staffId, string $branch): array
@@ -504,7 +550,7 @@ final class BillingController extends Controller
                 r.created_at AS receipt_created_at,
                 r.branch AS receipt_branch,
                 p.id AS payment_id,
-                p.amount,
+                p.amount AS payment_amount,
                 p.payment_method,
                 p.transaction_id,
                 br.*,
@@ -517,7 +563,7 @@ final class BillingController extends Controller
             INNER JOIN billing_records br ON br.id = r.billing_id
             LEFT JOIN patients pt ON pt.id = br.patient_id
             LEFT JOIN staff_branches sb ON sb.staff_id = br.dentist_id
-            WHERE 1=1";
+            WHERE p.payment_method <> 'insurance'";
 
         $params = [];
 
@@ -543,7 +589,7 @@ final class BillingController extends Controller
             }
 
             if (!isset($grouped[$receiptNumber])) {
-                $bill = $this->mapBillingRow($row);
+                $bill = $this->mapBillingRow($pdo, $row);
                 $grouped[$receiptNumber] = [
                     'receiptNumber' => $receiptNumber,
                     'bill' => $bill['bill'],
@@ -564,7 +610,7 @@ final class BillingController extends Controller
                 ];
             }
 
-            $grouped[$receiptNumber]['paidAmount'] += (float) ($row['amount'] ?? 0);
+            $grouped[$receiptNumber]['paidAmount'] += (float) ($row['payment_amount'] ?? 0);
             $methodLabel = ucwords(str_replace('_', ' ', (string) ($row['payment_method'] ?? 'cash')));
             if (!in_array($methodLabel, $grouped[$receiptNumber]['methods'], true)) {
                 $grouped[$receiptNumber]['methods'][] = $methodLabel;
@@ -588,8 +634,12 @@ final class BillingController extends Controller
         $statement = $pdo->prepare(
             "SELECT
                 br.*,
+                p.first_name,
+                p.last_name,
+                p.other_names,
                 COALESCE(br.branch, sb.branch, '') AS access_branch
              FROM billing_records br
+             LEFT JOIN patients p ON p.id = br.patient_id
              LEFT JOIN staff_branches sb ON sb.staff_id = br.dentist_id
              WHERE br.id = :id
              LIMIT 1"
@@ -609,6 +659,16 @@ final class BillingController extends Controller
             return null;
         }
 
+        $resolvedPatientName = trim((string) ($billing['patient_name'] ?? ''));
+        if ($resolvedPatientName === '') {
+            $resolvedPatientName = trim(implode(' ', array_filter([
+                $billing['first_name'] ?? '',
+                $billing['other_names'] ?? '',
+                $billing['last_name'] ?? '',
+            ])));
+            $billing['patient_name'] = $resolvedPatientName;
+        }
+
         return $billing;
     }
 
@@ -616,7 +676,7 @@ final class BillingController extends Controller
     {
         $billing = $this->billingById($pdo, $billingId, $role, $staffId, $branch);
 
-        return $billing ? $this->mapBillingRow($billing) : null;
+        return $billing ? $this->mapBillingRow($pdo, $billing) : null;
     }
 
     private function receiptDetailsByNumber(PDO $pdo, string $receiptNumber, string $role, int $staffId, string $branch): ?array
@@ -636,7 +696,7 @@ final class BillingController extends Controller
                 pt.other_names,
                 COALESCE(br.branch, sb.branch, '') AS access_branch
             FROM receipts r
-            INNER JOIN payments p ON p.id = r.payment_id
+            LEFT JOIN payments p ON p.id = r.payment_id
             INNER JOIN billing_records br ON br.id = r.billing_id
             LEFT JOIN patients pt ON pt.id = br.patient_id
             LEFT JOIN staff_branches sb ON sb.staff_id = br.dentist_id
@@ -660,16 +720,24 @@ final class BillingController extends Controller
             return null;
         }
 
-        $bill = $this->mapBillingRow($first);
-        $paymentLines = array_map(static function (array $row): array {
+        $bill = $this->mapBillingRow($pdo, $first);
+        $paymentLines = array_values(array_filter(array_map(static function (array $row): ?array {
+            $method = strtolower(trim((string) ($row['payment_method'] ?? '')));
+            if ($method === '' || $method === 'insurance' || (float) ($row['payment_amount'] ?? 0) <= 0) {
+                return null;
+            }
+
             return [
                 'paymentId' => (int) ($row['payment_id'] ?? 0),
-                'method' => ucwords(str_replace('_', ' ', (string) ($row['payment_method'] ?? 'cash'))),
+                'method' => ucwords(str_replace('_', ' ', $method)),
                 'amount' => (float) ($row['payment_amount'] ?? 0),
                 'amountLabel' => 'GHS ' . number_format((float) ($row['payment_amount'] ?? 0), 2),
                 'transactionId' => (string) ($row['transaction_id'] ?? ''),
             ];
-        }, $rows);
+        }, $rows)));
+        $insurance = $this->insuranceByReceiptNumber($pdo, $receiptNumber, (int) ($first['id'] ?? 0));
+        $insuranceAmount = (float) ($insurance['coveredAmount'] ?? 0);
+        $receiptTotal = array_reduce($paymentLines, static fn (float $sum, array $line): float => $sum + (float) $line['amount'], 0.0) + $insuranceAmount;
 
         return [
             'receiptNumber' => $receiptNumber,
@@ -678,16 +746,40 @@ final class BillingController extends Controller
             'createdAtLabel' => !empty($first['receipt_created_at']) ? date('d M Y h:i A', strtotime((string) $first['receipt_created_at'])) : '',
             'bill' => $bill,
             'paymentLines' => $paymentLines,
-            'totalPaid' => array_reduce($paymentLines, static fn (float $sum, array $line): float => $sum + (float) $line['amount'], 0.0),
-            'totalPaidLabel' => 'GHS ' . number_format(array_reduce($paymentLines, static fn (float $sum, array $line): float => $sum + (float) $line['amount'], 0.0), 2),
-            'insurance' => $this->latestInsuranceByBillingId($pdo, (int) ($first['id'] ?? 0)),
+            'totalPaid' => $receiptTotal,
+            'totalPaidLabel' => 'GHS ' . number_format($receiptTotal, 2),
+            'insurance' => $insurance,
         ];
     }
 
-    private function latestInsuranceByBillingId(PDO $pdo, int $billingId): ?array
+    private function insuranceByReceiptNumber(PDO $pdo, string $receiptNumber, int $billingId): ?array
     {
-        if ($billingId <= 0) {
+        if ($receiptNumber === '' && $billingId <= 0) {
             return null;
+        }
+
+        $hasReceiptColumn = $this->tableHasColumn($pdo, 'health_insurance', 'receipt_number');
+        if ($receiptNumber !== '' && $hasReceiptColumn) {
+            $statement = $pdo->prepare(
+                'SELECT insurance_type, company, insurance_number, insurance_category, expiry_date, insurance_covered_amount
+                 FROM health_insurance
+                 WHERE receipt_number = :receipt_number
+                 ORDER BY id DESC
+                 LIMIT 1'
+            );
+            $statement->execute(['receipt_number' => $receiptNumber]);
+            $row = $statement->fetch(PDO::FETCH_ASSOC);
+            if ($row) {
+                return [
+                    'insuranceType' => (string) ($row['insurance_type'] ?? ''),
+                    'company' => (string) ($row['company'] ?? ''),
+                    'insuranceNumber' => (string) ($row['insurance_number'] ?? ''),
+                    'insuranceCategory' => (string) ($row['insurance_category'] ?? ''),
+                    'expiryDate' => (string) ($row['expiry_date'] ?? ''),
+                    'coveredAmount' => (float) ($row['insurance_covered_amount'] ?? 0),
+                    'coveredAmountLabel' => 'GHS ' . number_format((float) ($row['insurance_covered_amount'] ?? 0), 2),
+                ];
+            }
         }
 
         $statement = $pdo->prepare(
@@ -715,7 +807,7 @@ final class BillingController extends Controller
         ];
     }
 
-    private function mapBillingRow(array $row): array
+    private function mapBillingRow(PDO $pdo, array $row): array
     {
         $patientName = trim((string) ($row['patient_name'] ?? ''));
         if ($patientName === '') {
@@ -731,7 +823,7 @@ final class BillingController extends Controller
             $billType = !empty($row['procedures_data']) ? 'procedure_charge' : 'procedure_charge';
         }
 
-        $procedureSummary = $this->procedureSummary($row);
+        $procedureSummary = $this->procedureSummary($pdo, $row);
         $chargeSummary = $billType === 'frontdesk_fees'
             ? $this->frontdeskChargeSummary($row)
             : $procedureSummary;
@@ -778,15 +870,52 @@ final class BillingController extends Controller
         return $parts !== [] ? implode(' + ', $parts) : 'Frontdesk fees';
     }
 
-    private function procedureSummary(array $row): string
+    private function procedureSummary(PDO $pdo, array $row): string
     {
         $proceduresData = $this->decodeProceduresData($row['procedures_data'] ?? null);
         if ($proceduresData !== []) {
-            return implode(', ', array_values(array_filter(array_map(static fn (array $entry): string => (string) ($entry['name'] ?? ''), $proceduresData))));
+            $labels = [];
+            foreach ($proceduresData as $entry) {
+                $name = trim((string) ($entry['name'] ?? ''));
+                if ($name === '') {
+                    $name = $this->procedureNameById($pdo, (int) ($entry['procedure_id'] ?? 0));
+                }
+
+                if ($name !== '') {
+                    $labels[] = $name;
+                }
+            }
+
+            if ($labels !== []) {
+                return implode(', ', array_values(array_unique($labels)));
+            }
         }
 
         $procedureName = trim((string) ($row['procedure_name'] ?? ''));
-        return $procedureName !== '' ? $procedureName : 'Not specified';
+        if ($procedureName !== '') {
+            return $procedureName;
+        }
+
+        $fallbackName = $this->procedureNameById($pdo, (int) ($row['procedure_id'] ?? 0));
+        return $fallbackName !== '' ? $fallbackName : 'Not specified';
+    }
+
+    private function procedureNameById(PDO $pdo, int $procedureId): string
+    {
+        if ($procedureId <= 0) {
+            return '';
+        }
+
+        if (array_key_exists($procedureId, $this->procedureNameCache)) {
+            return $this->procedureNameCache[$procedureId];
+        }
+
+        $statement = $pdo->prepare('SELECT name FROM procedures WHERE id = :id LIMIT 1');
+        $statement->execute(['id' => $procedureId]);
+        $name = trim((string) ($statement->fetchColumn() ?: ''));
+        $this->procedureNameCache[$procedureId] = $name;
+
+        return $name;
     }
 
     private function decodeProceduresData(mixed $value): array
@@ -892,6 +1021,7 @@ final class BillingController extends Controller
         $this->ensureColumn($pdo, 'billing_records', 'registration_fee', "ALTER TABLE billing_records ADD COLUMN registration_fee DECIMAL(10,2) DEFAULT 0.00 AFTER bill_type");
         $this->ensureColumn($pdo, 'billing_records', 'consultation_fee', "ALTER TABLE billing_records ADD COLUMN consultation_fee DECIMAL(10,2) DEFAULT 0.00 AFTER registration_fee");
         $this->ensureColumn($pdo, 'billing_records', 'branch', 'ALTER TABLE billing_records ADD COLUMN branch VARCHAR(100) NULL AFTER consultation_fee');
+        $this->ensureColumn($pdo, 'health_insurance', 'receipt_number', 'ALTER TABLE health_insurance ADD COLUMN receipt_number VARCHAR(50) NULL AFTER billing_id');
 
         $this->ensureTable($pdo, 'payments_new', "CREATE TABLE IF NOT EXISTS payments_new (
             payment_id VARCHAR(12) PRIMARY KEY,
@@ -899,6 +1029,8 @@ final class BillingController extends Controller
             amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
             created_at DATETIME NOT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        $this->ensureRepeatableReceiptNumbers($pdo);
     }
 
     private function ensureTable(PDO $pdo, string $table, string $sql): void
@@ -913,11 +1045,45 @@ final class BillingController extends Controller
 
     private function ensureColumn(PDO $pdo, string $table, string $column, string $sql): void
     {
-        $statement = $pdo->query("SHOW COLUMNS FROM {$table} LIKE " . $pdo->quote($column));
-        $exists = $statement !== false && $statement->fetch(PDO::FETCH_ASSOC);
+        $exists = $this->tableHasColumn($pdo, $table, $column);
 
         if (!$exists) {
             $pdo->exec($sql);
+        }
+    }
+
+    private function tableHasColumn(PDO $pdo, string $table, string $column): bool
+    {
+        $statement = $pdo->query("SHOW COLUMNS FROM {$table} LIKE " . $pdo->quote($column));
+        return $statement !== false && (bool) $statement->fetch(PDO::FETCH_ASSOC);
+    }
+
+    private function ensureRepeatableReceiptNumbers(PDO $pdo): void
+    {
+        $statement = $pdo->query("SHOW INDEX FROM receipts WHERE Column_name = 'receipt_number'");
+        if ($statement === false) {
+            return;
+        }
+
+        $indexes = $statement->fetchAll(PDO::FETCH_ASSOC);
+        $hasNonUniqueIndex = false;
+
+        foreach ($indexes as $index) {
+            $keyName = (string) ($index['Key_name'] ?? '');
+            $isUnique = (int) ($index['Non_unique'] ?? 1) === 0;
+
+            if ($keyName === 'receipt_number' && $isUnique) {
+                $pdo->exec('ALTER TABLE receipts DROP INDEX receipt_number');
+                continue;
+            }
+
+            if ((string) ($index['Column_name'] ?? '') === 'receipt_number') {
+                $hasNonUniqueIndex = true;
+            }
+        }
+
+        if (!$hasNonUniqueIndex) {
+            $pdo->exec('ALTER TABLE receipts ADD INDEX idx_receipts_receipt_number (receipt_number)');
         }
     }
 }

@@ -107,6 +107,7 @@ export function ReceptionInsurancePage({ data, onDeleteInsurance, onUpdateInsura
   const [deleting, setDeleting] = React.useState(false);
 
   const items = data?.items ?? [];
+  const summary = data?.summary ?? {};
   const filteredItems = items.filter((item) => {
     const statusMatch = statusFilter === 'all' || String(item.status ?? '').toLowerCase().replace(/\s+/g, '_') === statusFilter;
     const typeMatch = typeFilter === 'all' || String(item.billTypeLabel ?? '').toLowerCase().includes(typeFilter === 'frontdesk_fees' ? 'consultation' : 'procedure');
@@ -193,6 +194,44 @@ export function ReceptionInsurancePage({ data, onDeleteInsurance, onUpdateInsura
 
   return (
     <>
+      <section className="stats-grid">
+        {[
+          {
+            label: 'Insurance Records',
+            value: summary.totalRecords ?? items.length,
+            trend: 'All insurance-linked settlement records currently in view.',
+            icon: 'shield',
+          },
+          {
+            label: 'Covered Amount',
+            value: summary.totalCoveredLabel ?? 'GHS 0.00',
+            trend: 'Total amount being handled through insurance coverage.',
+            icon: 'receipt',
+          },
+          {
+            label: 'Open Balance',
+            value: summary.openBalanceLabel ?? 'GHS 0.00',
+            trend: 'Outstanding bill balance still remaining after insurance entries.',
+            icon: 'finance',
+          },
+          {
+            label: 'Completed vs Pending',
+            value: `${summary.completedCount ?? 0} / ${summary.pendingCount ?? 0}`,
+            trend: 'Completed insurance settlements compared with open ones.',
+            icon: 'reports',
+          },
+        ].map((item) => (
+          <article className="stat-card" key={item.label}>
+            <div className="stat-card-icon">
+              <PortalIcon className="nav-icon stat-card-icon-svg" name={item.icon} />
+            </div>
+            <span className="stat-card__label">{item.label}</span>
+            <h3>{item.value}</h3>
+            <p className="stat-card__trend">{item.trend}</p>
+          </article>
+        ))}
+      </section>
+
       <section className="module-card reception-toolbar-card">
         <div className="panel-heading workspace-card__header">
           <div>

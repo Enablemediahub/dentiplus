@@ -24,6 +24,7 @@ final class StoreController extends Controller
 
         Response::json([
             'items' => $this->storeItems($pdo, $role, $staffId, $branch),
+            'metrics' => $this->todayMetrics($pdo, $role, $staffId, $branch),
             'sales' => $this->recentSales($pdo, $role, $staffId, $branch),
         ]);
     }
@@ -262,12 +263,16 @@ final class StoreController extends Controller
         $sql = "
             SELECT
                 s.id,
+                s.receptionist_id,
                 s.total_amount,
                 s.created_at,
                 s.branch,
-                COUNT(ssi.id) AS item_count
+                COUNT(ssi.id) AS item_count,
+                COALESCE(SUM(ssi.quantity), 0) AS units_sold,
+                GROUP_CONCAT(DISTINCT si.name ORDER BY si.name SEPARATOR ', ') AS item_names
             FROM store_sales s
             LEFT JOIN store_sale_items ssi ON ssi.sale_id = s.id
+            LEFT JOIN store_items si ON si.id = ssi.item_id
             WHERE 1=1";
         $params = [];
 
@@ -277,18 +282,85 @@ final class StoreController extends Controller
             $params['branch'] = $branch;
         }
 
-        $sql .= ' GROUP BY s.id, s.total_amount, s.created_at, s.branch ORDER BY s.created_at DESC LIMIT 20';
+        $sql .= ' GROUP BY s.id, s.receptionist_id, s.total_amount, s.created_at, s.branch ORDER BY s.created_at DESC LIMIT 120';
         $statement = $pdo->prepare($sql);
         $statement->execute($params);
 
         return array_map(static fn (array $row): array => [
             'id' => (int) ($row['id'] ?? 0),
             'saleId' => 'SALE-' . str_pad((string) ($row['id'] ?? 0), 5, '0', STR_PAD_LEFT),
+            'receiptReference' => 'SALE-' . str_pad((string) ($row['id'] ?? 0), 5, '0', STR_PAD_LEFT),
+            'totalAmount' => (float) ($row['total_amount'] ?? 0),
             'totalAmountLabel' => 'GHS ' . number_format((float) ($row['total_amount'] ?? 0), 2),
+            'itemCount' => (int) ($row['item_count'] ?? 0),
             'itemCountLabel' => (int) ($row['item_count'] ?? 0) . ' item(s)',
+            'unitsSold' => (int) ($row['units_sold'] ?? 0),
+            'unitsSoldLabel' => (int) ($row['units_sold'] ?? 0) . ' unit(s)',
+            'itemNames' => (string) ($row['item_names'] ?? ''),
+            'cashierLabel' => (int) ($row['receptionist_id'] ?? 0) > 0 ? 'Staff #' . (int) ($row['receptionist_id'] ?? 0) : 'Store desk',
+            'createdAt' => (string) ($row['created_at'] ?? ''),
             'createdAtLabel' => !empty($row['created_at']) ? date('d M Y h:i A', strtotime((string) ($row['created_at'] ?? ''))) : '',
+            'createdDateLabel' => !empty($row['created_at']) ? date('d M Y', strtotime((string) ($row['created_at'] ?? ''))) : '',
             'branch' => (string) ($row['branch'] ?? ''),
         ], $statement->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    private function todayMetrics(PDO $pdo, string $role, int $staffId, string $branch): array
+    {
+        $sql = "
+            SELECT
+                COALESCE(SUM(s.total_amount), 0) AS revenue_today,
+                COUNT(DISTINCT s.id) AS transactions_today,
+                COALESCE(SUM(ssi.quantity), 0) AS units_sold_today
+            FROM store_sales s
+            LEFT JOIN store_sale_items ssi ON ssi.sale_id = s.id
+            WHERE DATE(s.created_at) = CURDATE()";
+        $params = [];
+
+        if ($role === 'receptionist' && $staffId > 0 && $branch !== '') {
+            $sql .= ' AND s.receptionist_id = :staff_id AND s.branch = :branch';
+            $params['staff_id'] = $staffId;
+            $params['branch'] = $branch;
+        }
+
+        $statement = $pdo->prepare($sql);
+        $statement->execute($params);
+        $salesRow = $statement->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $inventorySql = '
+            SELECT
+                SUM(CASE WHEN stock <= 10 AND stock > 0 THEN 1 ELSE 0 END) AS low_stock_count,
+                SUM(CASE WHEN stock <= 0 THEN 1 ELSE 0 END) AS out_of_stock_count
+            FROM store_items
+            WHERE 1=1';
+        $inventoryParams = [];
+
+        if ($role === 'receptionist' && $branch !== '') {
+            $inventorySql .= ' AND branch = :branch';
+            $inventoryParams['branch'] = $branch;
+        }
+
+        $inventoryStatement = $pdo->prepare($inventorySql);
+        $inventoryStatement->execute($inventoryParams);
+        $inventoryRow = $inventoryStatement->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $revenue = (float) ($salesRow['revenue_today'] ?? 0);
+        $transactions = (int) ($salesRow['transactions_today'] ?? 0);
+
+        return [
+            'revenueToday' => $revenue,
+            'revenueTodayLabel' => 'GHS ' . number_format($revenue, 2),
+            'transactionsToday' => $transactions,
+            'transactionsTodayLabel' => (string) $transactions,
+            'unitsSoldToday' => (int) ($salesRow['units_sold_today'] ?? 0),
+            'unitsSoldTodayLabel' => (int) ($salesRow['units_sold_today'] ?? 0) . ' units',
+            'averageSaleToday' => $transactions > 0 ? round($revenue / $transactions, 2) : 0.0,
+            'averageSaleTodayLabel' => 'GHS ' . number_format($transactions > 0 ? round($revenue / $transactions, 2) : 0.0, 2),
+            'lowStockCount' => (int) ($inventoryRow['low_stock_count'] ?? 0),
+            'lowStockCountLabel' => (string) ((int) ($inventoryRow['low_stock_count'] ?? 0)),
+            'outOfStockCount' => (int) ($inventoryRow['out_of_stock_count'] ?? 0),
+            'outOfStockCountLabel' => (string) ((int) ($inventoryRow['out_of_stock_count'] ?? 0)),
+        ];
     }
 
     private function ensureSchema(PDO $pdo): void

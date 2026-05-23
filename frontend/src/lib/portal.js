@@ -20,6 +20,7 @@ export const NAVIGATION = {
         { id: 'assign-patient', label: 'Assign Patient', navLabel: 'Assign Patient', icon: 'patients' },
         { id: 'walkin-registration', label: 'Walk-ins', navLabel: 'Walk-in Registration', icon: 'briefcase' },
         { id: 'payments', label: 'Payments', navLabel: 'Payments', icon: 'receipt' },
+        { id: 'past-receipts', label: 'Past Receipts', navLabel: 'Past Receipts', icon: 'receipt' },
         { id: 'patient-database', label: 'Patients', navLabel: 'Patient Database', icon: 'patients' },
       ],
     },
@@ -99,7 +100,9 @@ export const NAVIGATION = {
       title: 'Control Center',
       items: [
         { id: 'sales', label: 'Sales', navLabel: 'Sales Control', icon: 'trend' },
+        { id: 'past-receipts', label: 'Past Receipts', navLabel: 'Past Receipts', icon: 'receipt' },
         { id: 'expenses', label: 'Expenses', navLabel: 'Expense Control', icon: 'finance' },
+        { id: 'store-monitor', label: 'Store Monitor', navLabel: 'Store Monitor', icon: 'inventory' },
         { id: 'database', label: 'Database', navLabel: 'Platform Database', icon: 'layers' },
       ],
     },

@@ -26,6 +26,7 @@ import { ReceptionCustomerServicePage } from './components/ReceptionCustomerServ
 import { ReceptionInsurancePage } from './components/ReceptionInsurancePage';
 import { ReceptionExpensesPage } from './components/ReceptionExpensesPage';
 import { ReceptionStorePage } from './components/ReceptionStorePage';
+import { PastReceiptsPage } from './components/PastReceiptsPage';
 import { ProcedureChargePage } from './components/ProcedureChargePage';
 import { DentistDashboard } from './components/DentistDashboard';
 import { DentistPatientsPage } from './components/DentistPatientsPage';
@@ -33,6 +34,7 @@ import { AdminAppointmentsPage } from './components/AdminAppointmentsPage';
 import { AdminStaffPage } from './components/AdminStaffPage';
 import { AdminDatabasePage } from './components/AdminDatabasePage';
 import { AdminDashboard } from './components/AdminDashboard';
+import { AdminStoreMonitorPage } from './components/AdminStoreMonitorPage';
 
 const THEME_KEY = 'edental-theme';
 
@@ -717,13 +719,31 @@ function useDentiplusPortal() {
     return response;
   }
 
+  async function refreshStoreWorkspace(activeToken = token) {
+    const currentRole = normalizeRole(
+      portalData?.session?.user?.staff_role ?? portalData?.session?.user?.role,
+    );
+
+    if (currentRole === 'admin') {
+      await refreshAdminWorkspace(activeToken);
+      return;
+    }
+
+    if (currentRole === 'receptionist') {
+      await refreshReceptionWorkspace(activeToken);
+      return;
+    }
+
+    await refreshReceptionWorkspace(activeToken);
+  }
+
   async function handleCreateStoreItem(values) {
     if (!token) {
       throw new Error('Sign in again before adding a store item.');
     }
 
     const response = await api.createStoreItem(token, values);
-    await refreshReceptionWorkspace(token);
+    await refreshStoreWorkspace(token);
 
     return response;
   }
@@ -734,7 +754,7 @@ function useDentiplusPortal() {
     }
 
     const response = await api.updateStoreItem(token, values);
-    await refreshReceptionWorkspace(token);
+    await refreshStoreWorkspace(token);
 
     return response;
   }
@@ -745,7 +765,7 @@ function useDentiplusPortal() {
     }
 
     const response = await api.deleteStoreItem(token, values);
-    await refreshReceptionWorkspace(token);
+    await refreshStoreWorkspace(token);
 
     return response;
   }
@@ -756,7 +776,7 @@ function useDentiplusPortal() {
     }
 
     const response = await api.processStoreSale(token, values);
-    await refreshReceptionWorkspace(token);
+    await refreshStoreWorkspace(token);
 
     return response;
   }
@@ -1200,6 +1220,12 @@ function AppWorkspace({
         </div>
       )
     ),
+    'past-receipts': (
+      <PastReceiptsPage
+        billing={portalData?.billing}
+        onLoadReceipt={onLoadReceipt}
+      />
+    ),
     'procedure-charge': (
       role === 'dentist' ? (
         <ProcedureChargePage
@@ -1459,6 +1485,22 @@ function AppWorkspace({
           ]}
           rows={storeRows}
           actionLabel="Open store"
+        />
+      )
+    ),
+    'store-monitor': (
+      role === 'admin' ? (
+        <AdminStoreMonitorPage
+          data={portalData?.store}
+          onNavigate={setCurrentView}
+        />
+      ) : (
+        <ReceptionStorePage
+          data={portalData?.store}
+          onCreateStoreItem={onCreateStoreItem}
+          onDeleteStoreItem={onDeleteStoreItem}
+          onProcessStoreSale={onProcessStoreSale}
+          onUpdateStoreItem={onUpdateStoreItem}
         />
       )
     ),

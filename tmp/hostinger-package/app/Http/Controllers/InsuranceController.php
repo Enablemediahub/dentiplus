@@ -20,8 +20,11 @@ final class InsuranceController extends Controller
         $branch = trim((string) ($user['branch'] ?? ''));
         $pdo = Database::connection();
 
+        $items = $this->insuranceItems($pdo, $role, $staffId, $branch);
+
         Response::json([
-            'items' => $this->insuranceItems($pdo, $role, $staffId, $branch),
+            'summary' => $this->insuranceSummary($items),
+            'items' => $items,
         ]);
     }
 
@@ -96,9 +99,14 @@ final class InsuranceController extends Controller
                 br.status,
                 br.bill_type,
                 br.branch AS billing_branch,
+                br.patient_name AS billing_patient_name,
+                p.first_name,
+                p.last_name,
+                p.other_names,
                 COALESCE(br.branch, sb.branch, '') AS access_branch
             FROM health_insurance hi
             LEFT JOIN billing_records br ON br.id = hi.billing_id
+            LEFT JOIN patients p ON p.id = br.patient_id
             LEFT JOIN staff_branches sb ON sb.staff_id = br.dentist_id
             WHERE 1=1";
         $params = [];
@@ -116,11 +124,23 @@ final class InsuranceController extends Controller
         $statement->execute($params);
 
         return array_map(static function (array $row): array {
+            $patientName = trim((string) ($row['patient_name'] ?? ''));
+            if ($patientName === '') {
+                $patientName = trim((string) ($row['billing_patient_name'] ?? ''));
+            }
+            if ($patientName === '') {
+                $patientName = trim(implode(' ', array_filter([
+                    $row['first_name'] ?? '',
+                    $row['other_names'] ?? '',
+                    $row['last_name'] ?? '',
+                ])));
+            }
+
             return [
                 'id' => (int) ($row['id'] ?? 0),
                 'billingId' => isset($row['billing_id']) ? (int) $row['billing_id'] : 0,
                 'bill' => isset($row['billing_id']) ? sprintf('INV-%05d', (int) ($row['billing_id'] ?? 0)) : '-',
-                'patientName' => (string) ($row['patient_name'] ?? 'Unknown patient'),
+                'patientName' => $patientName !== '' ? $patientName : 'Unknown patient',
                 'insuranceType' => (string) ($row['insurance_type'] ?? ''),
                 'company' => (string) ($row['company'] ?? ''),
                 'insuranceNumber' => (string) ($row['insurance_number'] ?? ''),
@@ -129,6 +149,7 @@ final class InsuranceController extends Controller
                 'expiryDateLabel' => !empty($row['expiry_date']) ? date('d M Y', strtotime((string) ($row['expiry_date'] ?? ''))) : '',
                 'coveredAmount' => (float) ($row['insurance_covered_amount'] ?? 0),
                 'coveredAmountLabel' => 'GHS ' . number_format((float) ($row['insurance_covered_amount'] ?? 0), 2),
+                'balance' => (float) ($row['remaining_amount'] ?? 0),
                 'billAmountLabel' => 'GHS ' . number_format((float) ($row['amount'] ?? 0), 2),
                 'balanceLabel' => 'GHS ' . number_format((float) ($row['remaining_amount'] ?? 0), 2),
                 'status' => ucfirst(str_replace('_', ' ', (string) ($row['status'] ?? 'pending'))),
@@ -137,5 +158,35 @@ final class InsuranceController extends Controller
                 'createdAtLabel' => !empty($row['created_at']) ? date('d M Y h:i A', strtotime((string) ($row['created_at'] ?? ''))) : '',
             ];
         }, $statement->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    private function insuranceSummary(array $items): array
+    {
+        $totalCovered = 0.0;
+        $openBalance = 0.0;
+        $completed = 0;
+        $pending = 0;
+
+        foreach ($items as $item) {
+            $totalCovered += (float) ($item['coveredAmount'] ?? 0);
+            $openBalance += (float) ($item['balance'] ?? 0);
+            $normalizedStatus = strtolower(str_replace(' ', '_', (string) ($item['status'] ?? 'pending')));
+
+            if ($normalizedStatus === 'completed') {
+                $completed++;
+            } else {
+                $pending++;
+            }
+        }
+
+        return [
+            'totalRecords' => count($items),
+            'totalCovered' => $totalCovered,
+            'totalCoveredLabel' => 'GHS ' . number_format($totalCovered, 2),
+            'openBalance' => $openBalance,
+            'openBalanceLabel' => 'GHS ' . number_format($openBalance, 2),
+            'completedCount' => $completed,
+            'pendingCount' => $pending,
+        ];
     }
 }

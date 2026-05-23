@@ -8,6 +8,28 @@ function formatCurrency(value) {
   })}`;
 }
 
+function getReceiptDentistLabel(receipt) {
+  const rawName = String(receipt?.bill?.dentistName ?? '').trim();
+  if (!rawName || rawName.toLowerCase() === 'reception desk') {
+    return rawName || 'Reception desk';
+  }
+
+  if (receipt?.bill?.billType !== 'procedure_charge') {
+    return rawName;
+  }
+
+  const cleaned = rawName
+    .replace(/^dr\.?\s*\(dent\)\s*/i, '')
+    .replace(/^dr\.?\s*/i, '')
+    .trim();
+  const parts = cleaned.split(/\s+/).filter(Boolean);
+  if (!parts.length) {
+    return rawName;
+  }
+
+  return parts.map((part) => part.charAt(0).toUpperCase()).join('');
+}
+
 function normalizeDateOnly(value) {
   return String(value ?? '').slice(0, 10);
 }
@@ -35,6 +57,10 @@ function clampPage(page, totalPages) {
   }
 
   return Math.min(Math.max(page, 1), totalPages);
+}
+
+function getTodayDateValue() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function matchesSearch(item, query) {
@@ -179,6 +205,8 @@ function printThermalReceipt(receipt) {
     return;
   }
 
+  const dentistReceiptLabel = getReceiptDentistLabel(receipt);
+
   const insuranceSection = receipt.insurance ? `
     <div class="section">
       <div class="section-title">Insurance</div>
@@ -209,16 +237,20 @@ function printThermalReceipt(receipt) {
       <head>
         <title>${receipt.receiptNumber}</title>
         <style>
-          body { font-family: Arial, sans-serif; margin: 0; padding: 12px; color: #111; }
+          body { font-family: Arial, sans-serif; margin: 0; padding: 12px; color: #111; font-weight: 700; }
           .receipt { width: 302px; margin: 0 auto; }
           .center { text-align: center; }
-          .title { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
-          .small { font-size: 12px; color: #333; }
+          .title { font-size: 18px; font-weight: 800; margin-bottom: 6px; }
+          .small { font-size: 12px; color: #111; font-weight: 700; }
           .section { border-top: 1px dashed #666; padding-top: 8px; margin-top: 8px; }
-          .section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; margin-bottom: 6px; }
-          .line { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; margin-bottom: 4px; }
+          .section-title { font-size: 12px; font-weight: 800; text-transform: uppercase; margin-bottom: 6px; }
+          .line { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; margin-bottom: 4px; font-weight: 700; }
           .totals { border-top: 1px dashed #666; margin-top: 10px; padding-top: 8px; }
-          .strong { font-weight: 700; }
+          .strong { font-weight: 800; }
+          .paid-hero { border: 2px solid #111; padding: 10px 8px; margin-top: 8px; text-align: center; }
+          .paid-hero-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+          .paid-hero-value { font-size: 28px; line-height: 1; font-weight: 800; }
+          .footer-note { margin-top: 12px; text-align: center; font-size: 12px; line-height: 1.4; }
           @media print { body { padding: 0; } }
         </style>
       </head>
@@ -234,7 +266,11 @@ function printThermalReceipt(receipt) {
             <div class="line"><span>Patient</span><span>${receipt.bill.patientName}</span></div>
             <div class="line"><span>Bill</span><span>${receipt.bill.bill}</span></div>
             <div class="line"><span>Charge Type</span><span>${receipt.bill.billTypeLabel}</span></div>
-            <div class="line"><span>Dentist</span><span>${receipt.bill.dentistName}</span></div>
+            <div class="line"><span>Dentist</span><span>${dentistReceiptLabel}</span></div>
+            <div class="paid-hero">
+              <div class="paid-hero-label">Amount Paid</div>
+              <div class="paid-hero-value">${receipt.totalPaidLabel}</div>
+            </div>
           </div>
           ${billDetail}
           <div class="section">
@@ -247,7 +283,11 @@ function printThermalReceipt(receipt) {
             <div class="line strong"><span>Total Paid</span><span>${receipt.totalPaidLabel}</span></div>
             <div class="line"><span>Balance</span><span>${receipt.bill.balanceLabel}</span></div>
           </div>
-          <div class="center small" style="margin-top:12px;">Thank you for choosing eDENTAL CLINICS</div>
+          <div class="footer-note">
+            <div>Thank you for choosing eDENTAL CLINICS.</div>
+            <div>We appreciate your trust and wish you a healthy smile.</div>
+            <div style="margin-top:6px;">Designed and Powered By: DALE QUIST [Enable Technologies]</div>
+          </div>
         </div>
         <script>
           window.onload = function () {
@@ -322,7 +362,7 @@ function FrontdeskBillingModal({ isOpen, onClose, onSubmit, patients }) {
         consultation_fee: Number(consultationFee),
         notes,
       });
-      onClose(response?.bill ?? null);
+      onClose(response?.bill ?? null, response?.message ?? 'Frontdesk bill created successfully.');
     } catch (error) {
       setFeedback(error.message);
     } finally {
@@ -424,6 +464,8 @@ function ReceiptPreviewModal({ isOpen, onClose, onPrint, receipt }) {
     return null;
   }
 
+  const dentistReceiptLabel = getReceiptDentistLabel(receipt);
+
   return (
     <div className="workspace-modal-backdrop" onClick={onClose} role="presentation">
       <div aria-modal="true" className="workspace-modal receipt-preview-modal" onClick={(event) => event.stopPropagation()} role="dialog">
@@ -456,7 +498,20 @@ function ReceiptPreviewModal({ isOpen, onClose, onPrint, receipt }) {
               <div className="receipt-preview-sheet__line"><span>Patient</span><span>{receipt.bill.patientName}</span></div>
               <div className="receipt-preview-sheet__line"><span>Bill</span><span>{receipt.bill.bill}</span></div>
               <div className="receipt-preview-sheet__line"><span>Charge Type</span><span>{receipt.bill.billTypeLabel}</span></div>
-              <div className="receipt-preview-sheet__line"><span>Dentist</span><span>{receipt.bill.dentistName}</span></div>
+              <div className="receipt-preview-sheet__line"><span>Dentist</span><span>{dentistReceiptLabel}</span></div>
+              <div
+                style={{
+                  border: '2px solid currentColor',
+                  borderRadius: '12px',
+                  padding: '12px 10px',
+                  margin: '10px 0',
+                  textAlign: 'center',
+                  fontWeight: 800,
+                }}
+              >
+                <div style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '4px' }}>Amount Paid</div>
+                <div style={{ fontSize: '28px', lineHeight: 1 }}>{receipt.totalPaidLabel}</div>
+              </div>
             </div>
 
             <div className="receipt-preview-sheet__section">
@@ -498,6 +553,11 @@ function ReceiptPreviewModal({ isOpen, onClose, onPrint, receipt }) {
               <div className="receipt-preview-sheet__line"><span>Total bill</span><span>{receipt.bill.amountLabel}</span></div>
               <div className="receipt-preview-sheet__line"><span>Total paid</span><strong>{receipt.totalPaidLabel}</strong></div>
               <div className="receipt-preview-sheet__line"><span>Balance</span><span>{receipt.bill.balanceLabel}</span></div>
+            </div>
+            <div className="receipt-preview-sheet__section" style={{ textAlign: 'center', fontWeight: 800 }}>
+              <div>Thank you for choosing eDENTAL CLINICS.</div>
+              <div>We appreciate your trust and wish you a healthy smile.</div>
+              <div style={{ marginTop: '6px' }}>Designed and Powered By: DALE QUIST [Enable Technologies]</div>
             </div>
           </div>
         </div>
@@ -618,12 +678,14 @@ function PaymentProcessingModal({ bill, isOpen, onClose, onSubmit, onPaymentSave
   const [saving, setSaving] = React.useState(false);
   const [feedback, setFeedback] = React.useState('');
 
+  const billBalance = Number(bill?.balance ?? 0);
+
   React.useEffect(() => {
     if (!isOpen || !bill) {
       return;
     }
 
-    setStatus(Number(bill.balance ?? 0) > 0 ? 'partially_paid' : 'completed');
+    setStatus(billBalance > 0 ? 'partially_paid' : 'completed');
     setPayments([{ method: 'cash', amount: '', transaction_id: '' }]);
     setInsurance({
       insurance_type: '',
@@ -634,11 +696,7 @@ function PaymentProcessingModal({ bill, isOpen, onClose, onSubmit, onPaymentSave
       insurance_covered_amount: '',
     });
     setFeedback('');
-  }, [isOpen, bill]);
-
-  if (!isOpen || !bill) {
-    return null;
-  }
+  }, [bill, billBalance, isOpen]);
 
   function updatePayment(index, field, value) {
     setPayments((current) => current.map((entry, entryIndex) => (
@@ -654,21 +712,90 @@ function PaymentProcessingModal({ bill, isOpen, onClose, onSubmit, onPaymentSave
     setPayments((current) => (current.length > 1 ? current.filter((_, entryIndex) => entryIndex !== index) : current));
   }
 
-  const totalEntered = payments.reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
   const usesInsurance = payments.some((entry) => entry.method === 'insurance');
+  const insuranceLineCount = payments.reduce((count, entry) => count + (entry.method === 'insurance' ? 1 : 0), 0);
+  const insuranceCoveredAmount = Number(insurance.insurance_covered_amount || 0);
+  const getEffectivePaymentAmount = React.useCallback((entry) => {
+    if (entry.method === 'insurance') {
+      return insuranceCoveredAmount;
+    }
+
+    return Number(entry.amount || 0);
+  }, [insuranceCoveredAmount]);
+  const totalEntered = payments.reduce((sum, entry) => sum + getEffectivePaymentAmount(entry), 0);
+  const requiresReference = payments.some((entry) => (
+    ['mobile_money', 'card'].includes(entry.method) && String(entry.transaction_id ?? '').trim() === ''
+  ));
+  const remainingBalance = Math.max(0, billBalance - totalEntered);
+  const enteredTotalLabel = formatCurrency(totalEntered);
+  const remainingBalanceLabel = formatCurrency(remainingBalance);
+
+  React.useEffect(() => {
+    if (!bill || status === 'rejected') {
+      return;
+    }
+
+    const nextStatus = totalEntered > 0 && totalEntered >= billBalance - 0.01
+      ? 'completed'
+      : 'partially_paid';
+
+    setStatus((current) => (current === nextStatus ? current : nextStatus));
+  }, [bill, status, totalEntered]);
+
+  if (!isOpen || !bill) {
+    return null;
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
+
+    if (status !== 'rejected') {
+      if (totalEntered <= 0) {
+        setFeedback('Enter a payment amount greater than zero before issuing a receipt.');
+        return;
+      }
+
+      if (totalEntered > billBalance + 0.01) {
+        setFeedback('Total paid amount cannot exceed the remaining bill balance.');
+        return;
+      }
+
+      if (payments.some((entry) => getEffectivePaymentAmount(entry) <= 0)) {
+        setFeedback('Each payment line must have an amount greater than zero.');
+        return;
+      }
+
+      if (requiresReference) {
+        setFeedback('Transaction ID is required for Mobile Money and Card payments.');
+        return;
+      }
+
+      if (
+        usesInsurance &&
+        (
+          !String(insurance.insurance_type ?? '').trim() ||
+          !String(insurance.insurance_number ?? '').trim() ||
+          !String(insurance.expiry_date ?? '').trim() ||
+          Number(insurance.insurance_covered_amount || 0) <= 0
+        )
+      ) {
+        setFeedback('Insurance type, number, expiry date, and covered amount are required for insurance payments.');
+        return;
+      }
+    }
+
     setSaving(true);
     setFeedback('');
 
     try {
       const response = await onSubmit({
         billing_id: bill.billingId,
-        status,
+        status: status === 'rejected'
+          ? 'rejected'
+          : (totalEntered >= billBalance - 0.01 ? 'completed' : 'partially_paid'),
         payments: payments.map((entry) => ({
           method: entry.method,
-          amount: Number(entry.amount),
+          amount: getEffectivePaymentAmount(entry),
           transaction_id: entry.transaction_id,
         })),
         insurance: {
@@ -676,7 +803,7 @@ function PaymentProcessingModal({ bill, isOpen, onClose, onSubmit, onPaymentSave
           insurance_covered_amount: Number(insurance.insurance_covered_amount),
         },
       });
-      onPaymentSaved(response?.receipt ?? null);
+      onPaymentSaved(response?.receipt ?? null, response?.message ?? 'Payment saved successfully.');
       onClose();
     } catch (error) {
       setFeedback(error.message);
@@ -733,6 +860,18 @@ function PaymentProcessingModal({ bill, isOpen, onClose, onSubmit, onPaymentSave
                 </>
               ) : null}
             </div>
+            <div className="frontdesk-command-grid" style={{ marginTop: '16px' }}>
+              <div className="frontdesk-highlight">
+                <span>Entered total</span>
+                <strong>{enteredTotalLabel}</strong>
+                <p>Updates live while payment figures are being entered.</p>
+              </div>
+              <div className="frontdesk-highlight">
+                <span>Remaining balance</span>
+                <strong>{remainingBalanceLabel}</strong>
+                <p>Autocalculated from the current bill balance minus the entered payment total.</p>
+              </div>
+            </div>
           </div>
 
           <label className="field-block">
@@ -743,6 +882,12 @@ function PaymentProcessingModal({ bill, isOpen, onClose, onSubmit, onPaymentSave
               <option value="rejected">Rejected</option>
             </select>
           </label>
+
+          {status !== 'rejected' ? (
+            <p className="table-subcopy" style={{ marginTop: '-4px' }}>
+              The payment status adjusts automatically from the amount entered so the receipt can process smoothly.
+            </p>
+          ) : null}
 
           {status !== 'rejected' ? payments.map((entry, index) => (
             <div className="workspace-form-section" key={`payment-line-${index}`}>
@@ -767,13 +912,21 @@ function PaymentProcessingModal({ bill, isOpen, onClose, onSubmit, onPaymentSave
                     <option value="cash">Cash</option>
                     <option value="mobile_money">Mobile Money</option>
                     <option value="card">Card / Paystack</option>
-                    <option value="insurance">Insurance</option>
+                    <option disabled={insuranceLineCount > 0 && entry.method !== 'insurance'} value="insurance">Insurance</option>
                   </select>
                 </label>
 
                 <label className="field-block">
                   <span>Amount</span>
-                  <input min="0" onChange={(event) => updatePayment(index, 'amount', event.target.value)} placeholder="0.00" step="0.01" type="number" value={entry.amount} />
+                  <input
+                    min="0"
+                    onChange={(event) => updatePayment(index, 'amount', event.target.value)}
+                    placeholder={entry.method === 'insurance' ? 'Uses covered amount below' : '0.00'}
+                    readOnly={entry.method === 'insurance'}
+                    step="0.01"
+                    type="number"
+                    value={entry.method === 'insurance' ? insurance.insurance_covered_amount : entry.amount}
+                  />
                 </label>
 
                 <label className="field-block field-block--wide">
@@ -857,12 +1010,13 @@ export function ReceptionPaymentsPage({
   onLoadReceipt,
   patients,
 }) {
+  const todayDate = React.useMemo(() => getTodayDateValue(), []);
   const [search, setSearch] = React.useState('');
   const [methodFilter, setMethodFilter] = React.useState('all');
   const [billTypeFilter, setBillTypeFilter] = React.useState('all');
   const [statusFilter, setStatusFilter] = React.useState('all');
-  const [startDate, setStartDate] = React.useState('');
-  const [endDate, setEndDate] = React.useState('');
+  const [startDate, setStartDate] = React.useState(todayDate);
+  const [endDate, setEndDate] = React.useState(todayDate);
   const [billRowsPerPage, setBillRowsPerPage] = React.useState(15);
   const [historyRowsPerPage, setHistoryRowsPerPage] = React.useState(15);
   const [page, setPage] = React.useState(1);
@@ -874,6 +1028,7 @@ export function ReceptionPaymentsPage({
   const [activeReceipt, setActiveReceipt] = React.useState(null);
   const [receiptLoading, setReceiptLoading] = React.useState(false);
   const [deletingBillingId, setDeletingBillingId] = React.useState(null);
+  const [successMessage, setSuccessMessage] = React.useState('');
 
   const items = billing?.items ?? [];
   const history = billing?.history ?? [];
@@ -1098,6 +1253,8 @@ export function ReceptionPaymentsPage({
           </div>
         </div>
 
+        {successMessage ? <p className="form-success">{successMessage}</p> : null}
+
         <div className="reception-filter-strip reception-filter-strip--ledger">
           <label className="field-block reception-inline-field reception-search-field">
             <span>Search sales page</span>
@@ -1262,7 +1419,17 @@ export function ReceptionPaymentsPage({
           </span>
         </div>
         <div className="table-wrap">
-          <table className="data-table">
+          <table className="data-table payments-open-bills-table">
+            <colgroup>
+              <col className="payments-open-bills-table__col-bill" />
+              <col className="payments-open-bills-table__col-patient" />
+              <col className="payments-open-bills-table__col-charge" />
+              <col className="payments-open-bills-table__col-type" />
+              <col className="payments-open-bills-table__col-total" />
+              <col className="payments-open-bills-table__col-balance" />
+              <col className="payments-open-bills-table__col-status" />
+              <col className="payments-open-bills-table__col-actions" />
+            </colgroup>
             <thead>
               <tr>
                 <th>Bill</th>
@@ -1278,18 +1445,24 @@ export function ReceptionPaymentsPage({
             <tbody>
               {paginatedItems.length ? paginatedItems.map((item) => (
                 <tr key={`open-bill-${item.billingId}`}>
-                  <td>{item.bill}</td>
-                  <td>
+                  <td className="payments-open-bills-table__bill-cell">{item.bill}</td>
+                  <td className="payments-open-bills-table__patient-cell">
                     <strong>{item.patientName}</strong>
                     <span className="table-subcopy">{item.dentistName}</span>
                   </td>
-                  <td>{item.chargeSummary}</td>
-                  <td>{item.billTypeLabel}</td>
-                  <td><strong>{item.amountLabel}</strong></td>
-                  <td className="table-balance-negative"><strong>{item.balanceLabel}</strong></td>
-                  <td>{item.status}</td>
-                  <td>
-                    <div className="reception-action-row">
+                  <td className="payments-open-bills-table__charge-cell">
+                    <div className="payments-open-bills-table__charge-copy" title={item.chargeSummary}>{item.chargeSummary}</div>
+                  </td>
+                  <td className="payments-open-bills-table__type-cell">
+                    <div className="payments-open-bills-table__type-copy">{item.billTypeLabel}</div>
+                  </td>
+                  <td className="payments-open-bills-table__money-cell"><strong>{item.amountLabel}</strong></td>
+                  <td className="table-balance-negative payments-open-bills-table__money-cell"><strong>{item.balanceLabel}</strong></td>
+                  <td className="payments-open-bills-table__status-cell">
+                    <div className="payments-open-bills-table__status-copy">{item.status}</div>
+                  </td>
+                  <td className="payments-open-bills-table__actions-cell">
+                    <div className="reception-action-row payments-open-bills-table__actions-row">
                       <button className="clinical-workspace-button secondary-action--compact" onClick={() => setSelectedBill(item)} type="button">
                         Process payment
                       </button>
@@ -1339,8 +1512,11 @@ export function ReceptionPaymentsPage({
 
       <FrontdeskBillingModal
         isOpen={frontdeskModalOpen}
-        onClose={(bill) => {
+        onClose={(bill, message = '') => {
           setFrontdeskModalOpen(false);
+          if (message) {
+            setSuccessMessage(message);
+          }
           if (bill) {
             setSelectedBill(bill);
           }
@@ -1353,7 +1529,10 @@ export function ReceptionPaymentsPage({
         bill={selectedBill}
         isOpen={Boolean(selectedBill)}
         onClose={() => setSelectedBill(null)}
-        onPaymentSaved={(receipt) => {
+        onPaymentSaved={(receipt, message = '') => {
+          if (message) {
+            setSuccessMessage(message);
+          }
           if (receipt) {
             setActiveReceipt(receipt);
             setReceiptModalOpen(true);

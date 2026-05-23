@@ -1582,6 +1582,107 @@ button {
   font-size: 0.84rem;
 }
 
+.payments-open-bills-table {
+  min-width: 1080px;
+  table-layout: auto;
+}
+
+.payments-open-bills-table th,
+.payments-open-bills-table td {
+  white-space: normal;
+  vertical-align: top;
+}
+
+.payments-open-bills-table__col-bill {
+  width: 9%;
+}
+
+.payments-open-bills-table__col-patient {
+  width: 17%;
+}
+
+.payments-open-bills-table__col-charge {
+  width: 27%;
+}
+
+.payments-open-bills-table__col-type {
+  width: 13%;
+}
+
+.payments-open-bills-table__col-total,
+.payments-open-bills-table__col-balance {
+  width: 9%;
+}
+
+.payments-open-bills-table__col-status {
+  width: 8%;
+}
+
+.payments-open-bills-table__col-actions {
+  width: 170px;
+}
+
+.payments-open-bills-table__bill-cell {
+  min-width: 88px;
+  white-space: nowrap;
+}
+
+.payments-open-bills-table__patient-cell {
+  min-width: 0;
+}
+
+.payments-open-bills-table__charge-cell {
+  min-width: 0;
+}
+
+.payments-open-bills-table__charge-copy {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+  max-width: 32ch;
+}
+
+.payments-open-bills-table__type-cell {
+  min-width: 0;
+}
+
+.payments-open-bills-table__type-copy {
+  white-space: normal;
+  line-height: 1.4;
+  max-width: 15ch;
+}
+
+.payments-open-bills-table__money-cell {
+  white-space: nowrap;
+}
+
+.payments-open-bills-table__status-cell {
+  min-width: 0;
+}
+
+.payments-open-bills-table__status-copy {
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.payments-open-bills-table__actions-cell {
+  min-width: 160px;
+}
+
+.payments-open-bills-table__actions-row {
+  gap: 8px;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.payments-open-bills-table__actions-row .secondary-action--compact {
+  width: 100%;
+  justify-content: center;
+  padding: 8px 10px;
+  font-size: 0.84rem;
+  line-height: 1.2;
+}
+
 .table-counter {
   color: var(--text-muted);
   font-size: 0.88rem;

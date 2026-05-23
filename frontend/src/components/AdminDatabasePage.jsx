@@ -114,6 +114,7 @@ export function AdminDatabasePage({
   const expenseItems = expenses?.items ?? [];
   const insuranceItems = insurance?.items ?? [];
   const storeItems = store?.items ?? [];
+  const storeSales = store?.sales ?? [];
   const staffItems = staff?.items ?? [];
 
   const explorerRows = React.useMemo(() => createExplorerRows({
@@ -205,7 +206,7 @@ export function AdminDatabasePage({
           <div className="frontdesk-highlight">
             <span>Store items</span>
             <strong>{storeItems.length}</strong>
-            <p>Inventory entries currently available for admin oversight.</p>
+            <p>{storeSales.length} recent store sale entries are ready for monitoring.</p>
           </div>
         </div>
       </section>
@@ -222,6 +223,7 @@ export function AdminDatabasePage({
           {[
             { id: 'sales', icon: 'trend', title: 'Sales desk', copy: 'Create bills, process payments, reprint receipts, and clear billing issues.' },
             { id: 'expenses', icon: 'finance', title: 'Expenses', copy: 'Log, edit, filter, and delete operational expense records.' },
+            { id: 'store-monitor', icon: 'inventory', title: 'Store monitor', copy: 'Track daily store turnover, live-search sales, and watch stock pressure from one admin page.' },
             { id: 'patients', icon: 'patients', title: 'Patient database', copy: 'Correct registrations, clean duplicates, and review the full patient register.' },
             { id: 'appointments', icon: 'calendar', title: 'Appointments', copy: 'Search the booking ledger and create new clinic appointments.' },
             { id: 'insurance', icon: 'shield', title: 'Insurance', copy: 'Review, edit, and remove insurance claims and coverage details.' },

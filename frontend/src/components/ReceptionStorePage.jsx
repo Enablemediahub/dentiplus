@@ -1,6 +1,13 @@
 import React from 'react';
 import { PortalIcon } from './PortalIcon';
 
+function formatCurrency(value) {
+  return `GHS ${Number(value ?? 0).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 function clampPage(page, totalPages) {
   if (totalPages <= 0) {
     return 1;
@@ -26,6 +33,83 @@ function matchesSearch(item, query) {
     item.stockLabel,
     item.status,
   ].join(' ').toLowerCase().includes(trimmed);
+}
+
+function matchesSaleSearch(sale, query) {
+  const trimmed = query.trim().toLowerCase();
+  if (!trimmed) {
+    return true;
+  }
+
+  return [
+    sale.saleId,
+    sale.totalAmountLabel,
+    sale.itemCountLabel,
+    sale.unitsSoldLabel,
+    sale.itemNames,
+    sale.cashierLabel,
+    sale.createdAtLabel,
+    sale.createdDateLabel,
+    sale.branch,
+  ].join(' ').toLowerCase().includes(trimmed);
+}
+
+function printStoreReceipt(receipt) {
+  const popup = window.open('', '_blank', 'width=420,height=720');
+  if (!popup) {
+    return;
+  }
+
+  popup.document.write(`
+    <!doctype html>
+    <html>
+      <head>
+        <title>Store Sale ${receipt.saleId}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 0; padding: 12px; color: #111; }
+          .receipt { width: 302px; margin: 0 auto; }
+          .center { text-align: center; }
+          .title { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+          .small { font-size: 12px; color: #333; }
+          .section { border-top: 1px dashed #666; padding-top: 8px; margin-top: 8px; }
+          .section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; margin-bottom: 6px; }
+          .line { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; margin-bottom: 4px; }
+          .totals { border-top: 1px dashed #666; margin-top: 10px; padding-top: 8px; }
+          .strong { font-weight: 700; }
+          @media print { body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <div class="receipt">
+          <div class="center">
+            <div class="title">eDENTAL CLINICS STORE</div>
+            <div class="small">Thermal receipt</div>
+            <div class="small">Sale #${receipt.saleId}</div>
+            <div class="small">${receipt.branch || 'Main branch'}</div>
+            <div class="small">${receipt.dateLabel}</div>
+          </div>
+          <div class="section">
+            <div class="section-title">Items</div>
+            ${receipt.items.map((item) => `
+              <div class="line"><span>${item.name} x${item.quantity}</span><span>${item.subtotalLabel}</span></div>
+              <div class="line"><span>@ ${item.priceLabel}</span><span></span></div>
+            `).join('')}
+          </div>
+          <div class="totals">
+            <div class="line strong"><span>Total</span><span>${receipt.totalAmountLabel}</span></div>
+          </div>
+          <div class="center small" style="margin-top:12px;">Thank you for choosing eDENTAL CLINICS</div>
+        </div>
+        <script>
+          window.onload = function () {
+            window.print();
+            setTimeout(function () { window.close(); }, 150);
+          };
+        </script>
+      </body>
+    </html>
+  `);
+  popup.document.close();
 }
 
 function ItemModal({ deleting, feedback, form, isOpen, onChange, onClose, onDelete, onSubmit, saving }) {
@@ -153,7 +237,7 @@ function SaleModal({ feedback, form, inventory, isOpen, onAddLine, onChange, onC
   );
 }
 
-function ReceiptModal({ isOpen, onClose, receipt }) {
+function ReceiptModal({ isOpen, onClose, onPrint, receipt }) {
   if (!isOpen || !receipt) {
     return null;
   }
@@ -167,7 +251,13 @@ function ReceiptModal({ isOpen, onClose, receipt }) {
             <h3>Sale #{receipt.saleId}</h3>
             <p>{receipt.dateLabel}</p>
           </div>
-          <button className="ghost-button secondary-action--compact" onClick={onClose} type="button">Close</button>
+          <div className="reception-action-row">
+            <button className="ghost-button secondary-action--compact workspace-inline-action" onClick={() => onPrint(receipt)} type="button">
+              <PortalIcon className="workspace-submit-icon" name="receipt" />
+              <span>Print receipt</span>
+            </button>
+            <button className="ghost-button secondary-action--compact" onClick={onClose} type="button">Close</button>
+          </div>
         </div>
         <div className="workspace-modal__body">
           <div className="workspace-form-section receipt-preview-sheet">
@@ -199,6 +289,9 @@ export function ReceptionStorePage({ data, onCreateStoreItem, onDeleteStoreItem,
   const [stockFilter, setStockFilter] = React.useState('all');
   const [page, setPage] = React.useState(1);
   const [rowsPerPage, setRowsPerPage] = React.useState(15);
+  const [salesSearch, setSalesSearch] = React.useState('');
+  const [salesPage, setSalesPage] = React.useState(1);
+  const [salesRowsPerPage, setSalesRowsPerPage] = React.useState(10);
   const [itemModalOpen, setItemModalOpen] = React.useState(false);
   const [saleModalOpen, setSaleModalOpen] = React.useState(false);
   const [receiptModalOpen, setReceiptModalOpen] = React.useState(false);
@@ -213,6 +306,7 @@ export function ReceptionStorePage({ data, onCreateStoreItem, onDeleteStoreItem,
 
   const inventory = data?.items ?? [];
   const sales = data?.sales ?? [];
+  const metrics = data?.metrics ?? {};
   const filteredItems = inventory.filter((item) => {
     const matchesStock = stockFilter === 'all'
       || (stockFilter === 'low' && item.stock > 0 && item.stock <= 10)
@@ -223,6 +317,36 @@ export function ReceptionStorePage({ data, onCreateStoreItem, onDeleteStoreItem,
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / rowsPerPage));
   const currentPage = clampPage(page, totalPages);
   const paginatedItems = filteredItems.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+  const filteredSales = sales.filter((sale) => matchesSaleSearch(sale, salesSearch));
+  const salesTotalPages = Math.max(1, Math.ceil(filteredSales.length / salesRowsPerPage));
+  const currentSalesPage = clampPage(salesPage, salesTotalPages);
+  const paginatedSales = filteredSales.slice((currentSalesPage - 1) * salesRowsPerPage, currentSalesPage * salesRowsPerPage);
+  const statsWidgets = [
+    {
+      label: 'Store Revenue Today',
+      value: metrics.revenueTodayLabel ?? formatCurrency(0),
+      trend: `${metrics.transactionsTodayLabel ?? '0'} sales closed today`,
+      icon: 'trend',
+    },
+    {
+      label: 'Units Sold Today',
+      value: metrics.unitsSoldTodayLabel ?? '0 units',
+      trend: `Average ticket ${metrics.averageSaleTodayLabel ?? formatCurrency(0)}`,
+      icon: 'receipt',
+    },
+    {
+      label: 'Low Stock Items',
+      value: metrics.lowStockCountLabel ?? '0',
+      trend: `${metrics.outOfStockCountLabel ?? '0'} fully out of stock`,
+      icon: 'inventory',
+    },
+    {
+      label: 'Inventory Tracked',
+      value: String(inventory.length),
+      trend: `${sales.length} recorded sale entries available`,
+      icon: 'layers',
+    },
+  ];
 
   React.useEffect(() => {
     setPage(1);
@@ -231,6 +355,14 @@ export function ReceptionStorePage({ data, onCreateStoreItem, onDeleteStoreItem,
   React.useEffect(() => {
     setPage((current) => clampPage(current, totalPages));
   }, [totalPages]);
+
+  React.useEffect(() => {
+    setSalesPage(1);
+  }, [salesSearch, salesRowsPerPage]);
+
+  React.useEffect(() => {
+    setSalesPage((current) => clampPage(current, salesTotalPages));
+  }, [salesTotalPages]);
 
   function openNewItem() {
     setFeedback('');
@@ -337,12 +469,25 @@ export function ReceptionStorePage({ data, onCreateStoreItem, onDeleteStoreItem,
 
   return (
     <>
+      <section className="stats-grid content-grid">
+        {statsWidgets.map((item) => (
+          <article className="stat-card" key={item.label}>
+            <div className="stat-card-icon">
+              <PortalIcon className="nav-icon stat-card-icon-svg" name={item.icon} />
+            </div>
+            <span className="stat-card__label">{item.label}</span>
+            <h3>{item.value}</h3>
+            <p className="stat-card__trend">{item.trend}</p>
+          </article>
+        ))}
+      </section>
+
       <section className="module-card reception-toolbar-card">
         <div className="panel-heading workspace-card__header">
           <div>
             <p className="eyebrow">eDental store</p>
             <h3>Inventory and sales desk</h3>
-            <p>Manage branch store items, search stock, process sales against the live ASDental database, and keep a short recent-sales trail visible from one receptionist workspace.</p>
+            <p>Manage live stock, process over-the-counter sales, and keep today&apos;s store turnover visible without mixing it into the clinic billing sales lane.</p>
           </div>
           <div className="workspace-card__actions reception-action-row reception-action-row--end">
             <button className="primary-button workspace-inline-action" onClick={openNewItem} type="button">
@@ -444,8 +589,26 @@ export function ReceptionStorePage({ data, onCreateStoreItem, onDeleteStoreItem,
         <div className="panel-heading workspace-card__header">
           <div>
             <p className="eyebrow">Recent sales</p>
-            <h3>Latest branch sales</h3>
+            <h3>Latest branch store sales</h3>
           </div>
+          <span className="table-counter">
+            {filteredSales.length} results | Page {currentSalesPage} of {salesTotalPages}
+          </span>
+        </div>
+        <div className="reception-filter-strip">
+          <label className="field-block reception-inline-field reception-search-field">
+            <span>Search store sales</span>
+            <PortalIcon className="reception-search-icon" name="search" />
+            <input onChange={(event) => setSalesSearch(event.target.value)} placeholder="Sale ID, item names, date, branch..." type="text" value={salesSearch} />
+          </label>
+          <label className="field-block reception-inline-field">
+            <span>Sales rows</span>
+            <select onChange={(event) => setSalesRowsPerPage(Number(event.target.value))} value={salesRowsPerPage}>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={40}>40</option>
+            </select>
+          </label>
         </div>
         <div className="table-wrap">
           <table className="data-table">
@@ -453,25 +616,46 @@ export function ReceptionStorePage({ data, onCreateStoreItem, onDeleteStoreItem,
               <tr>
                 <th>Sale ID</th>
                 <th>Total</th>
+                <th>Units</th>
                 <th>Items</th>
+                <th>Branch</th>
                 <th>Date</th>
               </tr>
             </thead>
             <tbody>
-              {sales.length ? sales.map((sale) => (
+              {paginatedSales.length ? paginatedSales.map((sale) => (
                 <tr key={`store-sale-${sale.id}`}>
-                  <td>{sale.saleId}</td>
-                  <td>{sale.totalAmountLabel}</td>
-                  <td>{sale.itemCountLabel}</td>
+                  <td>
+                    <strong>{sale.saleId}</strong>
+                    <span className="table-subcopy">{sale.cashierLabel}</span>
+                  </td>
+                  <td><strong>{sale.totalAmountLabel}</strong></td>
+                  <td>{sale.unitsSoldLabel}</td>
+                  <td>
+                    {sale.itemCountLabel}
+                    {sale.itemNames ? <span className="table-subcopy">{sale.itemNames}</span> : null}
+                  </td>
+                  <td>{sale.branch || 'Main branch'}</td>
                   <td>{sale.createdAtLabel}</td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan="4">No store sales have been recorded yet.</td>
+                  <td colSpan="6">No store sales match the current live search.</td>
                 </tr>
               )}
             </tbody>
           </table>
+        </div>
+        <div className="table-pagination">
+          <span className="table-counter">
+            Showing {paginatedSales.length ? (currentSalesPage - 1) * salesRowsPerPage + 1 : 0}
+            {' - '}
+            {Math.min(currentSalesPage * salesRowsPerPage, filteredSales.length)} of {filteredSales.length}
+          </span>
+          <div className="reception-action-row">
+            <button className="ghost-button secondary-action--compact" disabled={currentSalesPage <= 1} onClick={() => setSalesPage((value) => Math.max(1, value - 1))} type="button">Previous</button>
+            <button className="ghost-button secondary-action--compact" disabled={currentSalesPage >= salesTotalPages} onClick={() => setSalesPage((value) => Math.min(salesTotalPages, value + 1))} type="button">Next</button>
+          </div>
         </div>
       </section>
 
@@ -512,6 +696,7 @@ export function ReceptionStorePage({ data, onCreateStoreItem, onDeleteStoreItem,
       <ReceiptModal
         isOpen={receiptModalOpen}
         onClose={() => setReceiptModalOpen(false)}
+        onPrint={printStoreReceipt}
         receipt={activeReceipt}
       />
     </>
