@@ -8,6 +8,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\ClinicalRecordsController;
 use App\Http\Controllers\CustomerServiceController;
+use App\Http\Controllers\DatabaseAdminController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExpensesController;
 use App\Http\Controllers\InsuranceController;
@@ -37,6 +38,10 @@ return [
         '/api/v1/staff' => [StaffController::class, 'index'],
         '/api/v1/settings' => [SettingsController::class, 'index'],
         '/api/v1/store' => [StoreController::class, 'index'],
+        '/api/v1/database-admin/meta' => [DatabaseAdminController::class, 'meta'],
+        '/api/v1/database-admin/table' => [DatabaseAdminController::class, 'table'],
+        '/api/v1/database-admin/row' => [DatabaseAdminController::class, 'row'],
+        '/api/v1/database-admin/duplicates' => [DatabaseAdminController::class, 'duplicates'],
     ],
     'POST' => [
         '/api/v1/auth/login' => [AuthController::class, 'login'],
@@ -74,5 +79,7 @@ return [
         '/api/v1/store/items/update' => [StoreController::class, 'updateItem'],
         '/api/v1/store/items/delete' => [StoreController::class, 'deleteItem'],
         '/api/v1/store/sales' => [StoreController::class, 'processSale'],
+        '/api/v1/database-admin/update' => [DatabaseAdminController::class, 'update'],
+        '/api/v1/database-admin/delete' => [DatabaseAdminController::class, 'delete'],
     ],
 ];

@@ -17,8 +17,8 @@ final class StoreController extends Controller
         $user = $this->authUser();
         $role = $this->normalizedRole($user);
         $staffId = isset($user['staff_id']) ? (int) $user['staff_id'] : 0;
-        $branch = trim((string) ($user['branch'] ?? ''));
         $pdo = Database::connection();
+        $branch = $this->resolvedBranchFilter($pdo, $user);
 
         $this->ensureSchema($pdo);
 
@@ -236,7 +236,7 @@ final class StoreController extends Controller
         $sql = 'SELECT id, name, description, price, stock, branch, created_at FROM store_items WHERE 1=1';
         $params = [];
 
-        if ($role === 'receptionist' && $branch !== '') {
+        if (in_array($role, ['receptionist', 'admin'], true) && $branch !== '') {
             $sql .= ' AND branch = :branch';
             $params['branch'] = $branch;
         }
@@ -280,6 +280,9 @@ final class StoreController extends Controller
             $sql .= ' AND s.receptionist_id = :staff_id AND s.branch = :branch';
             $params['staff_id'] = $staffId;
             $params['branch'] = $branch;
+        } elseif ($role === 'admin' && $branch !== '') {
+            $sql .= ' AND s.branch = :branch';
+            $params['branch'] = $branch;
         }
 
         $sql .= ' GROUP BY s.id, s.receptionist_id, s.total_amount, s.created_at, s.branch ORDER BY s.created_at DESC LIMIT 120';
@@ -321,6 +324,9 @@ final class StoreController extends Controller
             $sql .= ' AND s.receptionist_id = :staff_id AND s.branch = :branch';
             $params['staff_id'] = $staffId;
             $params['branch'] = $branch;
+        } elseif ($role === 'admin' && $branch !== '') {
+            $sql .= ' AND s.branch = :branch';
+            $params['branch'] = $branch;
         }
 
         $statement = $pdo->prepare($sql);
@@ -335,7 +341,7 @@ final class StoreController extends Controller
             WHERE 1=1';
         $inventoryParams = [];
 
-        if ($role === 'receptionist' && $branch !== '') {
+        if (in_array($role, ['receptionist', 'admin'], true) && $branch !== '') {
             $inventorySql .= ' AND branch = :branch';
             $inventoryParams['branch'] = $branch;
         }

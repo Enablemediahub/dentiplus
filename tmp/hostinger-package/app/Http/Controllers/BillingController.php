@@ -19,8 +19,8 @@ final class BillingController extends Controller
         $user = $this->authUser();
         $role = $this->normalizedRole($user);
         $staffId = isset($user['staff_id']) ? (int) $user['staff_id'] : 0;
-        $branch = trim((string) ($user['branch'] ?? ''));
         $pdo = Database::connection();
+        $branch = $this->resolvedBranchFilter($pdo, $user);
 
         $this->ensureSchema($pdo);
 
@@ -529,6 +529,9 @@ final class BillingController extends Controller
         if ($role === 'receptionist' && $branch !== '') {
             $sql .= ' AND COALESCE(br.branch, sb.branch, \'\') IN (\'\', :branch_match)';
             $params['branch_match'] = $branch;
+        } elseif ($role === 'admin' && $branch !== '') {
+            $sql .= ' AND COALESCE(NULLIF(br.branch, \'\'), sb.branch, \'\') = :branch_match';
+            $params['branch_match'] = $branch;
         } elseif ($role === 'dentist' && $staffId > 0) {
             $sql .= ' AND br.dentist_id = :dentist_id';
             $params['dentist_id'] = $staffId;
@@ -569,6 +572,9 @@ final class BillingController extends Controller
 
         if ($role === 'receptionist' && $branch !== '') {
             $sql .= ' AND COALESCE(br.branch, sb.branch, \'\') IN (\'\', :branch_match)';
+            $params['branch_match'] = $branch;
+        } elseif ($role === 'admin' && $branch !== '') {
+            $sql .= ' AND COALESCE(NULLIF(br.branch, \'\'), sb.branch, \'\') = :branch_match';
             $params['branch_match'] = $branch;
         } elseif ($role === 'dentist' && $staffId > 0) {
             $sql .= ' AND br.dentist_id = :dentist_id';
@@ -655,6 +661,10 @@ final class BillingController extends Controller
             return null;
         }
 
+        if ($role === 'admin' && $branch !== '' && (string) ($billing['access_branch'] ?? '') !== $branch) {
+            return null;
+        }
+
         if ($role === 'dentist' && $staffId > 0 && (int) ($billing['dentist_id'] ?? 0) !== $staffId) {
             return null;
         }
@@ -716,25 +726,50 @@ final class BillingController extends Controller
             return null;
         }
 
+        if ($role === 'admin' && $branch !== '' && (string) ($first['access_branch'] ?? '') !== $branch) {
+            return null;
+        }
+
         if ($role === 'dentist' && $staffId > 0 && (int) ($first['dentist_id'] ?? 0) !== $staffId) {
             return null;
         }
 
         $bill = $this->mapBillingRow($pdo, $first);
-        $paymentLines = array_values(array_filter(array_map(static function (array $row): ?array {
+        $seenPaymentKeys = [];
+        $paymentLines = [];
+
+        foreach ($rows as $row) {
             $method = strtolower(trim((string) ($row['payment_method'] ?? '')));
-            if ($method === '' || $method === 'insurance' || (float) ($row['payment_amount'] ?? 0) <= 0) {
-                return null;
+            $amount = (float) ($row['payment_amount'] ?? 0);
+            if ($method === '' || $method === 'insurance' || $amount <= 0) {
+                continue;
             }
 
-            return [
-                'paymentId' => (int) ($row['payment_id'] ?? 0),
+            $paymentId = (int) ($row['payment_id'] ?? 0);
+            $transactionId = trim((string) ($row['transaction_id'] ?? ''));
+            $dedupeKey = $paymentId > 0
+                ? 'payment:' . $paymentId
+                : implode('|', [
+                    'fallback',
+                    $method,
+                    number_format($amount, 2, '.', ''),
+                    strtolower($transactionId),
+                ]);
+
+            if (isset($seenPaymentKeys[$dedupeKey])) {
+                continue;
+            }
+
+            $seenPaymentKeys[$dedupeKey] = true;
+            $paymentLines[] = [
+                'paymentId' => $paymentId,
                 'method' => ucwords(str_replace('_', ' ', $method)),
-                'amount' => (float) ($row['payment_amount'] ?? 0),
-                'amountLabel' => 'GHS ' . number_format((float) ($row['payment_amount'] ?? 0), 2),
-                'transactionId' => (string) ($row['transaction_id'] ?? ''),
+                'amount' => $amount,
+                'amountLabel' => 'GHS ' . number_format($amount, 2),
+                'transactionId' => $transactionId,
             ];
-        }, $rows)));
+        }
+
         $insurance = $this->insuranceByReceiptNumber($pdo, $receiptNumber, (int) ($first['id'] ?? 0));
         $insuranceAmount = (float) ($insurance['coveredAmount'] ?? 0);
         $receiptTotal = array_reduce($paymentLines, static fn (float $sum, array $line): float => $sum + (float) $line['amount'], 0.0) + $insuranceAmount;

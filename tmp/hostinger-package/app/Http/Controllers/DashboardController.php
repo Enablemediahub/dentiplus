@@ -16,7 +16,8 @@ final class DashboardController extends Controller
         $role = $this->normalizedRole($user);
         $pdo = Database::connection();
         $staffId = isset($user['staff_id']) ? (int) $user['staff_id'] : 0;
-        $branch = trim((string) ($user['branch'] ?? ''));
+        $availableBranches = $this->availableBranches($pdo);
+        $branch = $this->resolvedBranchFilter($pdo, $user);
 
         $todayAppointments = $this->todayAppointmentsCount($pdo, $role, $staffId, $branch);
         $waitingPatients = $this->waitingPatientsCount($pdo, $role, $staffId, $branch);
@@ -67,6 +68,8 @@ final class DashboardController extends Controller
             'payment_breakdown' => $paymentBreakdown,
             'today_expenses' => $expensesSummary['total'],
             'today_expense_count' => $expensesSummary['count'],
+            'selectedBranch' => $branch,
+            'availableBranches' => $availableBranches,
             'metrics' => [
                 'today_appointments' => $todayAppointments,
                 'today_patients' => $todayPatients,
@@ -93,6 +96,19 @@ final class DashboardController extends Controller
         }
 
         if ($role === 'receptionist' && $branch !== '') {
+            $statement = $pdo->prepare(
+                "SELECT COUNT(*)
+                 FROM appointments a
+                 INNER JOIN staff_branches sb ON sb.staff_id = a.dentist_id
+                 WHERE sb.branch = :branch
+                   AND a.appointment_date = CURDATE()"
+            );
+            $statement->execute(['branch' => $branch]);
+
+            return (int) $statement->fetchColumn();
+        }
+
+        if ($role === 'admin' && $branch !== '') {
             $statement = $pdo->prepare(
                 "SELECT COUNT(*)
                  FROM appointments a
@@ -137,6 +153,19 @@ final class DashboardController extends Controller
             return (int) $statement->fetchColumn();
         }
 
+        if ($role === 'admin' && $branch !== '') {
+            $statement = $pdo->prepare(
+                "SELECT COUNT(*)
+                 FROM patients p
+                 INNER JOIN staff_branches sb ON sb.staff_id = p.receptionist_id
+                 WHERE p.status = 'waiting'
+                   AND sb.branch = :branch"
+            );
+            $statement->execute(['branch' => $branch]);
+
+            return (int) $statement->fetchColumn();
+        }
+
         return (int) $pdo->query("SELECT COUNT(*) FROM patients WHERE status = 'waiting'")->fetchColumn();
     }
 
@@ -169,6 +198,19 @@ final class DashboardController extends Controller
             return (int) $statement->fetchColumn();
         }
 
+        if ($role === 'admin' && $branch !== '') {
+            $statement = $pdo->prepare(
+                "SELECT COUNT(*)
+                 FROM patient_assignments pa
+                 INNER JOIN staff_branches sb ON sb.staff_id = pa.dentist_id
+                 WHERE pa.status = 'waiting'
+                   AND sb.branch = :branch"
+            );
+            $statement->execute(['branch' => $branch]);
+
+            return (int) $statement->fetchColumn();
+        }
+
         return (int) $pdo->query("SELECT COUNT(*) FROM patient_assignments WHERE status = 'waiting'")->fetchColumn();
     }
 
@@ -177,6 +219,19 @@ final class DashboardController extends Controller
         if ($role === 'receptionist' && $staffId > 0) {
             $statement = $pdo->prepare("SELECT COUNT(*) FROM patients WHERE receptionist_id = :staff_id AND DATE(created_at) = CURDATE()");
             $statement->execute(['staff_id' => $staffId]);
+
+            return (int) $statement->fetchColumn();
+        }
+
+        if ($role === 'admin' && $branch !== '') {
+            $statement = $pdo->prepare(
+                "SELECT COUNT(*)
+                 FROM patients p
+                 INNER JOIN staff_branches sb ON sb.staff_id = p.receptionist_id
+                 WHERE DATE(p.created_at) = CURDATE()
+                   AND sb.branch = :branch"
+            );
+            $statement->execute(['branch' => $branch]);
 
             return (int) $statement->fetchColumn();
         }
@@ -211,6 +266,19 @@ final class DashboardController extends Controller
             return (int) $statement->fetchColumn();
         }
 
+        if ($role === 'admin' && $branch !== '') {
+            $statement = $pdo->prepare(
+                "SELECT COUNT(DISTINCT a.patient_name)
+                 FROM appointments a
+                 INNER JOIN staff_branches sb ON sb.staff_id = a.dentist_id
+                 WHERE sb.branch = :branch
+                   AND a.appointment_date = CURDATE()"
+            );
+            $statement->execute(['branch' => $branch]);
+
+            return (int) $statement->fetchColumn();
+        }
+
         return (int) $pdo->query("SELECT COUNT(DISTINCT patient_name) FROM appointments WHERE appointment_date = CURDATE()")->fetchColumn();
     }
 
@@ -223,17 +291,50 @@ final class DashboardController extends Controller
             return (int) $statement->fetchColumn();
         }
 
+        if ($role === 'admin' && $branch !== '') {
+            $statement = $pdo->prepare(
+                "SELECT COUNT(*)
+                 FROM billing_records br
+                 LEFT JOIN staff_branches sb ON sb.staff_id = br.dentist_id
+                 WHERE br.status IN ('pending', 'partially_paid')
+                   AND COALESCE(NULLIF(br.branch, ''), sb.branch, '') = :branch"
+            );
+            $statement->execute(['branch' => $branch]);
+
+            return (int) $statement->fetchColumn();
+        }
+
         return (int) $pdo->query("SELECT COUNT(*) FROM billing_records WHERE status IN ('pending', 'partially_paid')")->fetchColumn();
     }
 
     private function insuranceClaimsTotal(PDO $pdo, string $role, int $staffId, string $branch): float
     {
+        if ($role === 'admin' && $branch !== '') {
+            $statement = $pdo->prepare(
+                "SELECT COALESCE(SUM(hi.insurance_covered_amount), 0)
+                 FROM health_insurance hi
+                 LEFT JOIN billing_records br ON br.id = hi.billing_id
+                 LEFT JOIN staff_branches sb ON sb.staff_id = br.dentist_id
+                 WHERE COALESCE(NULLIF(br.branch, ''), sb.branch, '') = :branch"
+            );
+            $statement->execute(['branch' => $branch]);
+
+            return (float) ($statement->fetchColumn() ?: 0);
+        }
+
         return (float) $pdo->query("SELECT COALESCE(SUM(insurance_covered_amount), 0) FROM health_insurance")->fetchColumn();
     }
 
     private function staffCount(PDO $pdo, string $role, int $staffId, string $branch): int
     {
         if ($role === 'receptionist' && $branch !== '') {
+            $statement = $pdo->prepare('SELECT COUNT(DISTINCT staff_id) FROM staff_branches WHERE branch = :branch');
+            $statement->execute(['branch' => $branch]);
+
+            return (int) $statement->fetchColumn();
+        }
+
+        if ($role === 'admin' && $branch !== '') {
             $statement = $pdo->prepare('SELECT COUNT(DISTINCT staff_id) FROM staff_branches WHERE branch = :branch');
             $statement->execute(['branch' => $branch]);
 
@@ -273,6 +374,23 @@ final class DashboardController extends Controller
                 'staff_id' => $staffId,
                 'branch' => $branch,
             ]);
+        } elseif ($role === 'admin' && $branch !== '') {
+            $statement = $pdo->prepare(
+                "SELECT
+                    COALESCE(SUM(CASE WHEN p.payment_method = 'cash' THEN p.amount ELSE 0 END), 0) AS cash_total,
+                    COALESCE(SUM(CASE WHEN p.payment_method = 'mobile_money' THEN p.amount ELSE 0 END), 0) AS momo_total,
+                    COALESCE(SUM(CASE WHEN p.payment_method IN ('card', 'paystack') THEN p.amount ELSE 0 END), 0) AS paystack_total,
+                    COALESCE(SUM(CASE WHEN p.payment_method = 'bank' THEN p.amount ELSE 0 END), 0) AS bank_total
+                 FROM payments p
+                 LEFT JOIN billing_records br ON br.id = p.billing_id
+                 LEFT JOIN staff_branches sb ON sb.staff_id = br.dentist_id
+                 WHERE DATE(p.payment_date) = CURDATE()
+                   AND p.payment_method <> 'insurance'
+                   AND COALESCE(NULLIF(br.branch, ''), sb.branch, '') = :branch"
+            );
+            $statement->execute([
+                'branch' => $branch,
+            ]);
         } else {
             $statement = $pdo->query($sql);
         }
@@ -297,6 +415,23 @@ final class DashboardController extends Controller
     private function todayInsuranceTotal(PDO $pdo, string $role, int $staffId, string $branch): float
     {
         if ($role === 'receptionist' && $staffId > 0 && $branch !== '') {
+            $statement = $pdo->prepare(
+                "SELECT
+                    COALESCE(SUM(hi.insurance_covered_amount), 0) AS total
+                 FROM health_insurance hi
+                 LEFT JOIN billing_records br ON br.id = hi.billing_id
+                 LEFT JOIN staff_branches sb ON sb.staff_id = br.dentist_id
+                 WHERE COALESCE(NULLIF(br.branch, ''), sb.branch, '') = :branch
+                   AND DATE(hi.created_at) = CURDATE()"
+            );
+            $statement->execute([
+                'branch' => $branch,
+            ]);
+
+            return (float) ($statement->fetchColumn() ?: 0);
+        }
+
+        if ($role === 'admin' && $branch !== '') {
             $statement = $pdo->prepare(
                 "SELECT
                     COALESCE(SUM(hi.insurance_covered_amount), 0) AS total
@@ -346,6 +481,27 @@ final class DashboardController extends Controller
             ];
         }
 
+        if ($role === 'admin' && $branch !== '') {
+            $statement = $pdo->prepare(
+                "SELECT
+                    COALESCE(SUM(amount), 0) AS total,
+                    COUNT(*) AS expense_count
+                 FROM expenses
+                 WHERE DATE(created_at) = CURDATE()
+                   AND branch = :branch"
+            );
+            $statement->execute([
+                'branch' => $branch,
+            ]);
+
+            $row = $statement->fetch(PDO::FETCH_ASSOC) ?: [];
+
+            return [
+                'total' => (float) ($row['total'] ?? 0),
+                'count' => (int) ($row['expense_count'] ?? 0),
+            ];
+        }
+
         $row = $pdo->query(
             "SELECT
                 COALESCE(SUM(amount), 0) AS total,
@@ -358,5 +514,21 @@ final class DashboardController extends Controller
             'total' => (float) ($row['total'] ?? 0),
             'count' => (int) ($row['expense_count'] ?? 0),
         ];
+    }
+
+    private function availableBranches(PDO $pdo): array
+    {
+        $statement = $pdo->query(
+            "SELECT DISTINCT branch
+             FROM staff_branches
+             WHERE branch IS NOT NULL
+               AND branch <> ''
+             ORDER BY branch ASC"
+        );
+
+        return array_values(array_filter(array_map(
+            static fn ($value): string => trim((string) $value),
+            $statement->fetchAll(PDO::FETCH_COLUMN) ?: []
+        )));
     }
 }

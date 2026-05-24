@@ -24,9 +24,10 @@ final class StaffController extends Controller
 
         $pdo = Database::connection();
         $this->ensureStaffSchema($pdo);
+        $branch = $this->resolvedBranchFilter($pdo, $user);
 
-        $statement = $pdo->query(
-            "SELECT
+        $sql = "
+            SELECT
                 s.id AS staff_id,
                 s.user_id,
                 s.first_name,
@@ -44,9 +45,17 @@ final class StaffController extends Controller
                 COALESCE(sb.branch, 'Main clinic') AS branch
              FROM staff s
              INNER JOIN users u ON u.id = s.user_id
-             LEFT JOIN staff_branches sb ON sb.staff_id = s.id
-             ORDER BY s.created_at DESC, s.id DESC"
-        );
+             LEFT JOIN staff_branches sb ON sb.staff_id = s.id";
+        $params = [];
+
+        if ($branch !== '') {
+            $sql .= ' WHERE COALESCE(sb.branch, \'\') = :branch';
+            $params['branch'] = $branch;
+        }
+
+        $sql .= ' ORDER BY s.created_at DESC, s.id DESC';
+        $statement = $pdo->prepare($sql);
+        $statement->execute($params);
 
         $items = array_map(function (array $row): array {
             $staffRole = (string) ($row['staff_role'] ?? 'Admin');

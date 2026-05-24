@@ -17,8 +17,8 @@ final class InsuranceController extends Controller
         $user = $this->authUser();
         $role = $this->normalizedRole($user);
         $staffId = isset($user['staff_id']) ? (int) $user['staff_id'] : 0;
-        $branch = trim((string) ($user['branch'] ?? ''));
         $pdo = Database::connection();
+        $branch = $this->resolvedBranchFilter($pdo, $user);
 
         $items = $this->insuranceItems($pdo, $role, $staffId, $branch);
 
@@ -113,6 +113,9 @@ final class InsuranceController extends Controller
 
         if ($role === 'receptionist' && $branch !== '') {
             $sql .= ' AND COALESCE(br.branch, sb.branch, \'\') IN (\'\', :branch)';
+            $params['branch'] = $branch;
+        } elseif ($role === 'admin' && $branch !== '') {
+            $sql .= ' AND COALESCE(NULLIF(br.branch, \'\'), sb.branch, \'\') = :branch';
             $params['branch'] = $branch;
         } elseif ($role === 'dentist' && $staffId > 0) {
             $sql .= ' AND br.dentist_id = :dentist_id';

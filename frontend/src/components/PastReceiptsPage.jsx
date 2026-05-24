@@ -123,8 +123,8 @@ function printThermalReceipt(receipt) {
           </div>
           <div class="footer-note">
             <div>Thank you for choosing eDENTAL CLINICS.</div>
-            <div>We appreciate your trust and wish you a healthy smile.</div>
-            <div style="margin-top:6px;">Designed and Powered By: DALE QUIST [Enable Technologies]</div>
+            <div>+233 55 578 2191</div>
+            <div style="margin-top:6px; font-size:10px;">Designed and Powered By: DALE QUIST [Enable Technologies]</div>
           </div>
         </div>
         <script>
@@ -227,8 +227,8 @@ function ReceiptPreviewModal({ isOpen, onClose, onPrint, receipt }) {
             </div>
             <div className="receipt-preview-sheet__section" style={{ textAlign: 'center', fontWeight: 800 }}>
               <div>Thank you for choosing eDENTAL CLINICS.</div>
-              <div>We appreciate your trust and wish you a healthy smile.</div>
-              <div style={{ marginTop: '6px' }}>Designed and Powered By: DALE QUIST [Enable Technologies]</div>
+              <div>+233 55 578 2191</div>
+              <div style={{ marginTop: '6px', fontSize: '10px' }}>Designed and Powered By: DALE QUIST [Enable Technologies]</div>
             </div>
           </div>
         </div>

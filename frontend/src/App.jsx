@@ -37,6 +37,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { AdminStoreMonitorPage } from './components/AdminStoreMonitorPage';
 
 const THEME_KEY = 'edental-theme';
+const ADMIN_BRANCH_FILTER_KEY = 'dentiplus-admin-dashboard-branch';
 
 function getInitialViewFromHash() {
   const hashValue = String(window.location.hash || '').replace(/^#\/?/, '').trim();
@@ -62,8 +63,9 @@ function useDentiplusPortal() {
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [currentView, setCurrentView] = useState(() => getInitialViewFromHash());
+  const [adminDashboardBranch, setAdminDashboardBranch] = useState(() => localStorage.getItem(ADMIN_BRANCH_FILTER_KEY) ?? '');
 
-  async function loadPortalBundle(activeToken, existingSession = null) {
+  async function loadPortalBundle(activeToken, existingSession = null, dashboardBranch = '') {
     const session = existingSession ?? await api.session(activeToken);
     const role = normalizeRole(
       session?.user?.staff_role ?? session?.user?.role,
@@ -71,17 +73,17 @@ function useDentiplusPortal() {
 
     if (role === 'admin') {
       const [dashboard, settings, appointments, patients, billing, messages, expenses, insurance, store, staff, assignments] = await Promise.all([
-        api.dashboard(activeToken),
+        api.dashboard(activeToken, dashboardBranch),
         api.settings(activeToken),
-        api.appointments(activeToken),
-        api.patients(activeToken),
-        api.billing(activeToken),
+        api.appointments(activeToken, dashboardBranch),
+        api.patients(activeToken, dashboardBranch),
+        api.billing(activeToken, dashboardBranch),
         api.messages(activeToken),
-        api.expenses(activeToken),
-        api.insurance(activeToken),
-        api.store(activeToken),
-        api.staff(activeToken),
-        api.assignments(activeToken),
+        api.expenses(activeToken, dashboardBranch),
+        api.insurance(activeToken, dashboardBranch),
+        api.store(activeToken, dashboardBranch),
+        api.staff(activeToken, dashboardBranch),
+        api.assignments(activeToken, dashboardBranch),
       ]);
 
       return {
@@ -246,7 +248,7 @@ function useDentiplusPortal() {
 
       try {
         const session = await api.session(token);
-        const bundle = await loadPortalBundle(token, session);
+        const bundle = await loadPortalBundle(token, session, adminDashboardBranch);
 
         if (!active) {
           return;
@@ -344,12 +346,12 @@ function useDentiplusPortal() {
     ));
   }
 
-  async function refreshAdminWorkspace(activeToken = token) {
+  async function refreshAdminWorkspace(activeToken = token, dashboardBranch = adminDashboardBranch) {
     if (!activeToken) {
       return;
     }
 
-    const bundle = await loadPortalBundle(activeToken);
+    const bundle = await loadPortalBundle(activeToken, null, dashboardBranch);
 
     setAssignmentsData(bundle.assignments);
     setProcedureChargesData(bundle.procedureCharges);
@@ -825,6 +827,64 @@ function useDentiplusPortal() {
     return response;
   }
 
+  async function handleLoadDatabaseMeta(params = {}) {
+    if (!token) {
+      throw new Error('Sign in again before opening the database workspace.');
+    }
+
+    return api.databaseMeta(token, params);
+  }
+
+  async function handleLoadDatabaseTable(params = {}) {
+    if (!token) {
+      throw new Error('Sign in again before loading table data.');
+    }
+
+    return api.databaseTable(token, params);
+  }
+
+  async function handleLoadDatabaseRow(params = {}) {
+    if (!token) {
+      throw new Error('Sign in again before loading a database row.');
+    }
+
+    return api.databaseRow(token, params);
+  }
+
+  async function handleLoadDatabaseDuplicates(params = {}) {
+    if (!token) {
+      throw new Error('Sign in again before checking duplicates.');
+    }
+
+    return api.databaseDuplicates(token, params);
+  }
+
+  async function handleUpdateDatabaseRow(values) {
+    if (!token) {
+      throw new Error('Sign in again before updating a database row.');
+    }
+
+    return api.updateDatabaseRow(token, values);
+  }
+
+  async function handleDeleteDatabaseRow(values) {
+    if (!token) {
+      throw new Error('Sign in again before deleting a database row.');
+    }
+
+    return api.deleteDatabaseRow(token, values);
+  }
+
+  async function handleAdminDashboardBranchChange(nextBranch) {
+    const normalizedBranch = String(nextBranch ?? '').trim();
+    setAdminDashboardBranch(normalizedBranch);
+    localStorage.setItem(ADMIN_BRANCH_FILTER_KEY, normalizedBranch);
+
+    if (token) {
+      await refreshAdminWorkspace(token, normalizedBranch);
+    }
+  }
+
   return {
     bootState,
     loginError,
@@ -836,6 +896,7 @@ function useDentiplusPortal() {
     settingsSaving,
     mobileOpen,
     currentView,
+    adminDashboardBranch,
     setCurrentView,
     setMobileOpen,
     handleLogin,
@@ -871,6 +932,13 @@ function useDentiplusPortal() {
     handleUpdateStaff,
     handleDeleteStaff,
     handleResetStaffPassword,
+    handleLoadDatabaseMeta,
+    handleLoadDatabaseTable,
+    handleLoadDatabaseRow,
+    handleLoadDatabaseDuplicates,
+    handleUpdateDatabaseRow,
+    handleDeleteDatabaseRow,
+    handleAdminDashboardBranchChange,
     handleCreateStoreItem,
     handleUpdateStoreItem,
     handleDeleteStoreItem,
@@ -913,6 +981,12 @@ function AppWorkspace({
   onUpdateStaff,
   onDeleteStaff,
   onResetStaffPassword,
+  onLoadDatabaseMeta,
+  onLoadDatabaseTable,
+  onLoadDatabaseRow,
+  onLoadDatabaseDuplicates,
+  onUpdateDatabaseRow,
+  onDeleteDatabaseRow,
   onCreateStoreItem,
   onUpdateStoreItem,
   onDeleteStoreItem,
@@ -926,6 +1000,8 @@ function AppWorkspace({
   settingsSaving,
   theme,
   setTheme,
+  adminDashboardBranch,
+  onChangeAdminDashboardBranch,
   assignmentsData,
   procedureChargesData,
 }) {
@@ -1542,14 +1618,14 @@ function AppWorkspace({
     ),
     database: (
       <AdminDatabasePage
-        appointments={portalData?.appointments}
-        billing={portalData?.billing}
-        expenses={portalData?.expenses}
-        insurance={portalData?.insurance}
+        activeBranch={portalData?.dashboard?.selectedBranch ?? adminDashboardBranch}
+        onDeleteDatabaseRow={onDeleteDatabaseRow}
+        onLoadDatabaseDuplicates={onLoadDatabaseDuplicates}
+        onLoadDatabaseMeta={onLoadDatabaseMeta}
+        onLoadDatabaseRow={onLoadDatabaseRow}
+        onLoadDatabaseTable={onLoadDatabaseTable}
         onNavigate={setCurrentView}
-        patients={portalData?.patients}
-        staff={portalData?.staff}
-        store={portalData?.store}
+        onUpdateDatabaseRow={onUpdateDatabaseRow}
       />
     ),
     settings: role === 'admin' ? (
@@ -1579,30 +1655,37 @@ function AppWorkspace({
     />
   );
 
-  return (
-    <main className="portal-shell">
-      <Sidebar
-        branding={branding}
-        role={ROLE_LABELS[role]}
-        navSections={navSections}
-        currentView={currentView}
-        currentUser={user}
-        isMobileOpen={mobileOpen}
-        onNavigate={(view) => {
-          setCurrentView(view);
-          setMobileOpen(false);
-        }}
-        onClose={() => setMobileOpen(false)}
-        onSignOut={onLogout}
-      />
+  const isDatabaseFullscreen = currentView === 'database';
 
-      <div className="portal-main">
-          <HeaderHero
-            branding={branding}
-            currentPageLabel={currentPageLabel}
-            hero={hero}
-            onToggleSidebar={() => setMobileOpen(true)}
-            onSignOut={onLogout}
+  return (
+    <main className={`portal-shell ${isDatabaseFullscreen ? 'portal-shell--fullpage' : ''}`}>
+      {isDatabaseFullscreen ? null : (
+        <Sidebar
+          branding={branding}
+          role={ROLE_LABELS[role]}
+          navSections={navSections}
+          currentView={currentView}
+          currentUser={user}
+          isMobileOpen={mobileOpen}
+          onNavigate={(view) => {
+            setCurrentView(view);
+            setMobileOpen(false);
+          }}
+          onClose={() => setMobileOpen(false)}
+          onSignOut={onLogout}
+        />
+      )}
+
+      <div className={`portal-main ${isDatabaseFullscreen ? 'portal-main--fullpage' : ''}`}>
+        <HeaderHero
+          branding={branding}
+          branchOptions={role === 'admin' ? (portalData?.dashboard?.availableBranches ?? []) : []}
+          currentPageLabel={currentPageLabel}
+          hero={hero}
+          onToggleSidebar={() => setMobileOpen(true)}
+          onSelectBranch={role === 'admin' ? onChangeAdminDashboardBranch : null}
+          onSignOut={onLogout}
+          selectedBranch={role === 'admin' ? (portalData?.dashboard?.selectedBranch ?? adminDashboardBranch) : ''}
           setTheme={setTheme}
           theme={theme}
           user={user}
@@ -1627,6 +1710,7 @@ export default function App() {
     settingsSaving,
     mobileOpen,
     currentView,
+    adminDashboardBranch,
     setCurrentView,
     setMobileOpen,
     handleAssignPatient,
@@ -1655,6 +1739,13 @@ export default function App() {
     handleUpdateStaff,
     handleDeleteStaff,
     handleResetStaffPassword,
+    handleLoadDatabaseMeta,
+    handleLoadDatabaseTable,
+    handleLoadDatabaseRow,
+    handleLoadDatabaseDuplicates,
+    handleUpdateDatabaseRow,
+    handleDeleteDatabaseRow,
+    handleAdminDashboardBranchChange,
     handleCreateStoreItem,
     handleUpdateStoreItem,
     handleDeleteStoreItem,
@@ -1696,6 +1787,7 @@ export default function App() {
       branding={portalData?.settings?.branding ?? publicBranding}
       currentView={currentView}
       mobileOpen={mobileOpen}
+      adminDashboardBranch={adminDashboardBranch}
       assignmentsData={assignmentsData}
       procedureChargesData={procedureChargesData}
       onAssignPatient={handleAssignPatient}
@@ -1728,6 +1820,13 @@ export default function App() {
       onUpdateStaff={handleUpdateStaff}
       onDeleteStaff={handleDeleteStaff}
       onResetStaffPassword={handleResetStaffPassword}
+      onLoadDatabaseMeta={handleLoadDatabaseMeta}
+      onLoadDatabaseTable={handleLoadDatabaseTable}
+      onLoadDatabaseRow={handleLoadDatabaseRow}
+      onLoadDatabaseDuplicates={handleLoadDatabaseDuplicates}
+      onUpdateDatabaseRow={handleUpdateDatabaseRow}
+      onDeleteDatabaseRow={handleDeleteDatabaseRow}
+      onChangeAdminDashboardBranch={handleAdminDashboardBranchChange}
       onCreateStoreItem={handleCreateStoreItem}
       onUpdateStoreItem={handleUpdateStoreItem}
       onDeleteStoreItem={handleDeleteStoreItem}

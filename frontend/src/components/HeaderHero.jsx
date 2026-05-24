@@ -1,7 +1,19 @@
 import React from 'react';
 import { PortalIcon } from './PortalIcon';
 
-export function HeaderHero({ user, hero, branding, currentPageLabel, onToggleSidebar, theme, setTheme, onSignOut }) {
+export function HeaderHero({
+  user,
+  hero,
+  branding,
+  currentPageLabel,
+  onToggleSidebar,
+  theme,
+  setTheme,
+  onSignOut,
+  branchOptions = [],
+  selectedBranch = '',
+  onSelectBranch = null,
+}) {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = React.useState(false);
   const profileMenuRef = React.useRef(null);
   const heroProfileName = String(user?.last_name || '').trim() || user.name;
@@ -36,7 +48,25 @@ export function HeaderHero({ user, hero, branding, currentPageLabel, onToggleSid
             <p className="eyebrow">{hero.eyebrow}</p>
             <h2>{heroProfileName}</h2>
             <div className="portal-hero-meta">
-              <span className="portal-hero-branch">{user.branch || 'Main clinic'}</span>
+              {typeof onSelectBranch === 'function' ? (
+                <label className="portal-hero-branch portal-hero-branch-select" htmlFor="portal-branch-select">
+                  <span>Branch</span>
+                  <select
+                    id="portal-branch-select"
+                    onChange={(event) => onSelectBranch(event.target.value)}
+                    value={selectedBranch}
+                  >
+                    <option value="">All branches</option>
+                    {branchOptions.map((branch) => (
+                      <option key={branch} value={branch}>
+                        {branch}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <span className="portal-hero-branch">{user.branch || 'Main clinic'}</span>
+              )}
               <span className="portal-hero-role">{user.roleLabel}</span>
             </div>
             <div className="portal-hero-page">

@@ -194,7 +194,7 @@ export function ReceptionInsurancePage({ data, onDeleteInsurance, onUpdateInsura
 
   return (
     <>
-      <section className="stats-grid">
+      <section className="stats-grid insurance-stats-grid">
         {[
           {
             label: 'Insurance Records',
@@ -221,7 +221,7 @@ export function ReceptionInsurancePage({ data, onDeleteInsurance, onUpdateInsura
             icon: 'reports',
           },
         ].map((item) => (
-          <article className="stat-card" key={item.label}>
+          <article className="stat-card insurance-stat-card" key={item.label}>
             <div className="stat-card-icon">
               <PortalIcon className="nav-icon stat-card-icon-svg" name={item.icon} />
             </div>

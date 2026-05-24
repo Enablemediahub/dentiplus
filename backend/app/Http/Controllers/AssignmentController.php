@@ -270,7 +270,7 @@ final class AssignmentController extends Controller
             $params['receptionist_id'] = $staffId;
         }
 
-        $sql .= " ORDER BY p.status = 'waiting' DESC, p.created_at DESC LIMIT 80";
+        $sql .= " ORDER BY p.status = 'waiting' DESC, p.created_at DESC";
 
         $statement = $pdo->prepare($sql);
         $statement->execute($params);

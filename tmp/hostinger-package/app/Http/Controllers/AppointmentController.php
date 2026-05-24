@@ -17,8 +17,8 @@ final class AppointmentController extends Controller
         $user = $this->authUser();
         $role = $this->normalizedRole($user);
         $staffId = isset($user['staff_id']) ? (int) $user['staff_id'] : 0;
-        $branch = trim((string) ($user['branch'] ?? ''));
         $pdo = Database::connection();
+        $branch = $this->resolvedBranchFilter($pdo, $user);
 
         $items = $this->appointments($pdo, $role, $staffId, $branch);
         $todayItems = array_values(array_filter(
@@ -133,6 +133,9 @@ final class AppointmentController extends Controller
         if ($role === 'receptionist' && $staffId > 0 && $branch !== '') {
             $sql .= ' AND sb.branch = :branch';
             $params['branch'] = $branch;
+        } elseif ($role === 'admin' && $branch !== '') {
+            $sql .= ' AND sb.branch = :branch';
+            $params['branch'] = $branch;
         } elseif ($role === 'dentist' && $staffId > 0) {
             $sql .= ' AND a.dentist_id = :dentist_id';
             $params['dentist_id'] = $staffId;
@@ -192,7 +195,7 @@ final class AppointmentController extends Controller
 
         $params = [];
 
-        if ($role === 'receptionist' && $branch !== '') {
+        if (in_array($role, ['receptionist', 'admin'], true) && $branch !== '') {
             $sql .= ' AND sb.branch = :branch';
             $params['branch'] = $branch;
         }

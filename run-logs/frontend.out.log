@@ -1,89 +1,19 @@
 
-  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m521[22m[2m[0m ms[22m
+  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m6097[22m[2m[0m ms[22m
 
   [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5176[22m/[39m
   [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.137.1:[1m5176[22m/[39m
   [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.100.4:[1m5176[22m/[39m
   [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.112.1:[1m5176[22m/[39m
 [2m[32m  ➜[39m[22m[2m  press [22m[1mh + enter[22m[2m to show help[22m
-[2m6:07:38 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/App.jsx[22m
-[2m6:25:49 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m6:25:49 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionExpensesPage.jsx[22m
-[2m6:25:49 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/App.jsx[22m
-[2m6:26:21 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/App.jsx[22m
-[2m6:39:58 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m6:39:58 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionExpensesPage.jsx[22m
-[2m6:42:20 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m6:42:26 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m6:42:32 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/App.jsx[22m
-[2m6:42:47 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionExpensesPage.jsx[22m
-[2m6:42:57 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m
-[2m6:55:05 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m6:55:05 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m6:55:11 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionExpensesPage.jsx[22m
-[2m6:55:22 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m
-[2m7:00:19 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m7:22:01 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/lib/api.js[22m
-[2m7:22:17 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/App.jsx[22m
-[2m7:22:24 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/App.jsx[22m
-[2m7:22:30 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/App.jsx[22m
-[2m7:22:36 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/HeaderHero.jsx[22m
-[2m7:22:45 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/AdminStaffPage.jsx[22m
-[2m7:24:22 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/AdminStaffPage.jsx[22m
-[2m7:24:37 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m
-[2m7:24:49 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mindex.html[22m
-[2m7:34:32 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/PortalIcon.jsx[22m
-[2m7:34:47 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/AdminStaffPage.jsx[22m
-[2m7:34:54 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m
-[2m7:43:08 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/AdminStaffPage.jsx[22m
-[2m7:43:09 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/AdminStaffPage.jsx[22m
-[2m7:43:09 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/AdminStaffPage.jsx[22m
-[2m7:43:26 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m
-[2m8:13:58 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/lib/api.js[22m
-[2m8:13:58 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/lib/api.js[22m
-[2m8:14:05 PM[22m [36m[1m[vite][22m[39m [32mvite.config.js changed, restarting server...[39m
-[2m8:14:06 PM[22m [36m[1m[vite][22m[39m [32mvite.config.js changed, restarting server...[39m
-[2m8:14:09 PM[22m [36m[1m[vite][22m[39m server restarted.
-[2m8:14:10 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mindex.html[22m
-[2m8:56:09 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/App.jsx[22m
-[2m8:56:09 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/App.jsx[22m
-[2m8:56:09 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/App.jsx[22m
-[2m9:04:06 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/lib/api.js[22m
-[2m10:03:58 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionStorePage.jsx[22m
-[2m10:03:58 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionStorePage.jsx[22m
-[2m10:04:58 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/lib/portal.js[22m
-[2m10:05:06 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/AdminDatabasePage.jsx[22m
-[2m10:05:18 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/App.jsx[22m
-[2m10:05:24 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/App.jsx[22m
-[2m10:10:38 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionStorePage.jsx[22m
-[2m10:10:38 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionStorePage.jsx[22m
-[2m10:27:06 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m10:27:06 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m10:33:43 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m10:33:43 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m10:46:59 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m10:47:03 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m10:47:10 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m10:47:20 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m10:47:29 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m10:53:44 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m10:53:44 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m10:57:57 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m11:05:22 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m11:05:22 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m11:17:31 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m11:17:41 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m
-[2m11:19:22 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m11:19:22 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m11:19:36 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m
-[2m11:21:40 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m11:22:01 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m
-[2m11:37:12 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m11:42:10 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionInsurancePage.jsx[22m
-[2m11:42:10 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionInsurancePage.jsx[22m
-[2m11:59:30 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/lib/portal.js[22m
-[2m11:59:36 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/App.jsx[22m
-[2m12:01:50 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/PastReceiptsPage.jsx[22m
-[2m12:01:50 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/PastReceiptsPage.jsx[22m
-[2m12:01:51 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/PastReceiptsPage.jsx[22m
-[2m12:02:00 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/PastReceiptsPage.jsx[22m
+[2m6:07:04 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/AdminDatabasePage.jsx[22m
+[2m6:08:52 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/AdminDatabasePage.jsx[22m
+[2m6:09:39 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m
+[2m6:15:59 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/AdminDatabasePage.jsx[22m
+[2m6:58:52 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m
+[2m6:58:52 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m
+[2m7:11:05 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
+[2m7:11:05 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
+[2m7:11:14 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/PastReceiptsPage.jsx[22m
+[2m7:41:21 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/AdminDatabasePage.jsx[22m
+[2m7:41:21 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/AdminDatabasePage.jsx[22m

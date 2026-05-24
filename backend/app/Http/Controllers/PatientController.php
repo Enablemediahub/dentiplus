@@ -15,10 +15,12 @@ final class PatientController extends Controller
     public function index(): void
     {
         $user = $this->authUser();
+        $role = $this->normalizedRole($user);
         $staffId = isset($user['staff_id']) ? (int) $user['staff_id'] : 0;
         $pdo = Database::connection();
+        $branch = $this->resolvedBranchFilter($pdo, $user);
 
-        $items = $this->patients($pdo);
+        $items = $this->patients($pdo, $role, $branch);
         $walkins = array_values(array_filter(
             $items,
             static fn (array $item): bool => ($item['isWalkin'] ?? false) === true
@@ -294,46 +296,56 @@ final class PatientController extends Controller
         Response::json(['message' => 'Patient record deleted successfully.']);
     }
 
-    private function patients(PDO $pdo): array
+    private function patients(PDO $pdo, string $role, string $branch): array
     {
-        $statement = $pdo->query(
-            "SELECT
-                id,
-                first_name,
-                last_name,
-                other_names,
-                phone,
-                email,
-                birth_date,
-                gender,
-                address,
-                marital_status,
-                occupation,
-                employer,
-                emergency_contact_name,
-                emergency_contact_phone,
-                referral_source,
-                visit_reason,
-                assignment_visit_reason,
-                medical_history,
-                current_medications,
-                allergies,
-                dental_history,
-                last_dental_visit,
-                alcohol_use,
-                smoking,
-                pregnancy_status,
-                social_media_consent,
-                folder_id,
-                old_folder_id,
-                is_walkin,
-                receptionist_id,
-                status,
-                created_at
-             FROM patients
-             ORDER BY created_at DESC
-             "
-        );
+        $sql = "SELECT
+                p.id,
+                p.first_name,
+                p.last_name,
+                p.other_names,
+                p.phone,
+                p.email,
+                p.birth_date,
+                p.gender,
+                p.address,
+                p.marital_status,
+                p.occupation,
+                p.employer,
+                p.emergency_contact_name,
+                p.emergency_contact_phone,
+                p.referral_source,
+                p.visit_reason,
+                p.assignment_visit_reason,
+                p.medical_history,
+                p.current_medications,
+                p.allergies,
+                p.dental_history,
+                p.last_dental_visit,
+                p.alcohol_use,
+                p.smoking,
+                p.pregnancy_status,
+                p.social_media_consent,
+                p.folder_id,
+                p.old_folder_id,
+                p.is_walkin,
+                p.receptionist_id,
+                p.status,
+                p.created_at,
+                COALESCE(NULLIF(p.branch, ''), sb.branch, '') AS access_branch
+             FROM patients p
+             LEFT JOIN staff_branches sb ON sb.staff_id = p.receptionist_id
+             WHERE 1=1";
+        $params = [];
+
+        if ($role === 'admin' && $branch !== '') {
+            $sql .= " AND COALESCE(NULLIF(p.branch, ''), sb.branch, '') = :branch";
+            $params['branch'] = $branch;
+        }
+
+        $sql .= ' ORDER BY p.created_at DESC';
+
+        $statement = $pdo->prepare($sql);
+        $statement->execute($params);
 
         return array_map(fn (array $row): array => $this->formatPatientRow($row), $statement->fetchAll(PDO::FETCH_ASSOC));
     }

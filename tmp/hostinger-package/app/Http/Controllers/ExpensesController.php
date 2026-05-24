@@ -17,8 +17,8 @@ final class ExpensesController extends Controller
         $user = $this->authUser();
         $role = $this->normalizedRole($user);
         $staffId = isset($user['staff_id']) ? (int) $user['staff_id'] : 0;
-        $branch = trim((string) ($user['branch'] ?? ''));
         $pdo = Database::connection();
+        $branch = $this->resolvedBranchFilter($pdo, $user);
 
         $this->ensureSchema($pdo);
 
@@ -165,6 +165,9 @@ final class ExpensesController extends Controller
                 $sql .= ' AND branch = :branch';
                 $params['branch'] = $branch;
             }
+        } elseif ($role === 'admin' && $branch !== '') {
+            $sql .= ' AND branch = :branch';
+            $params['branch'] = $branch;
         }
 
         $sql .= ' ORDER BY expense_date DESC, id DESC';
