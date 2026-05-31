@@ -1,5 +1,11 @@
 import React from 'react';
 
+function normalizeBranchName(value) {
+  return String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function createPreview(value, fallbackValue) {
   if (value instanceof File) {
     return URL.createObjectURL(value);
@@ -8,7 +14,7 @@ function createPreview(value, fallbackValue) {
   return value || fallbackValue || null;
 }
 
-export function SettingsPanel({ branding, onSave, saving }) {
+export function SettingsPanel({ branding, branches = [], onCreateBranch, onSave, saving }) {
   const [form, setForm] = React.useState({
     clinicName: branding?.clinicName ?? '',
     address: branding?.address ?? '',
@@ -19,6 +25,9 @@ export function SettingsPanel({ branding, onSave, saving }) {
     sidebarLogo: null,
   });
   const [feedback, setFeedback] = React.useState({ type: '', message: '' });
+  const [branchName, setBranchName] = React.useState('');
+  const [branchSaving, setBranchSaving] = React.useState(false);
+  const [branchFeedback, setBranchFeedback] = React.useState({ type: '', message: '' });
 
   React.useEffect(() => {
     setForm((current) => ({
@@ -63,6 +72,29 @@ export function SettingsPanel({ branding, onSave, saving }) {
   function updateFile(event) {
     const { files, name } = event.target;
     setForm((current) => ({ ...current, [name]: files?.[0] ?? null }));
+  }
+
+  async function handleCreateBranch(event) {
+    event.preventDefault();
+    setBranchFeedback({ type: '', message: '' });
+
+    const normalizedName = normalizeBranchName(branchName);
+    if (!normalizedName) {
+      setBranchFeedback({ type: 'error', message: 'Branch name is required.' });
+      return;
+    }
+
+    setBranchSaving(true);
+
+    try {
+      await onCreateBranch({ name: normalizedName });
+      setBranchName('');
+      setBranchFeedback({ type: 'success', message: 'Branch added successfully.' });
+    } catch (error) {
+      setBranchFeedback({ type: 'error', message: error.message });
+    } finally {
+      setBranchSaving(false);
+    }
   }
 
   async function handleSubmit(event) {
@@ -114,6 +146,73 @@ export function SettingsPanel({ branding, onSave, saving }) {
             <span>Clinic address</span>
             <textarea name="address" onChange={updateField} rows={4} value={form.address} />
           </label>
+        </div>
+
+        <div className="workspace-form-section">
+          <div className="panel-heading workspace-card__header">
+            <div>
+              <p className="eyebrow">Branch control</p>
+              <h3>Branch directory</h3>
+              <p>Add a branch here once, then reuse it everywhere in staff management and branch-scoped records.</p>
+            </div>
+          </div>
+
+          <div className="frontdesk-command-grid">
+            <div className="frontdesk-highlight">
+              <span>Tracked branches</span>
+              <strong>{branches.length}</strong>
+              <p>Live branch names available for admin filters and staff assignment.</p>
+            </div>
+            <div className="frontdesk-highlight">
+              <span>Latest branch source</span>
+              <strong>Database table</strong>
+              <p>New branch entries are written directly into the `branches` table with their own IDs.</p>
+            </div>
+          </div>
+
+          <form className="reception-filter-strip" onSubmit={handleCreateBranch}>
+            <label className="field-block reception-inline-field reception-search-field">
+              <span>Add branch</span>
+              <input
+                onChange={(event) => setBranchName(event.target.value)}
+                placeholder="Enter branch name, e.g. Spintex"
+                type="text"
+                value={branchName}
+              />
+            </label>
+            <div className="workspace-card__actions reception-action-row reception-action-row--end">
+              <button className="primary-button workspace-inline-action" disabled={branchSaving} type="submit">
+                {branchSaving ? 'Adding branch...' : 'Add branch'}
+              </button>
+            </div>
+          </form>
+
+          {branchFeedback.message ? (
+            <p className={branchFeedback.type === 'error' ? 'form-error' : 'form-success'}>{branchFeedback.message}</p>
+          ) : null}
+
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Branch ID</th>
+                  <th>Branch name</th>
+                </tr>
+              </thead>
+              <tbody>
+                {branches.length ? branches.map((branch) => (
+                  <tr key={`settings-branch-${branch.id}`}>
+                    <td><strong>{branch.id}</strong></td>
+                    <td>{branch.name}</td>
+                  </tr>
+                )) : (
+                  <tr>
+                    <td colSpan="2">No branches have been added yet.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <div className="settings-media-grid">

@@ -89,6 +89,7 @@ final class StaffController extends Controller
 
         Response::json([
             'items' => $items,
+            'branches' => $this->availableBranchesWithIds($pdo),
         ]);
     }
 
@@ -102,6 +103,7 @@ final class StaffController extends Controller
 
         $pdo = Database::connection();
         $this->ensureStaffSchema($pdo);
+        $this->ensureBranchesSchema($pdo);
 
         $firstName = trim((string) ($_POST['first_name'] ?? ''));
         $lastName = trim((string) ($_POST['last_name'] ?? ''));
@@ -116,6 +118,11 @@ final class StaffController extends Controller
 
         if ($firstName === '' || $lastName === '' || $phone === '' || $email === '' || $username === '' || $role === '' || $branch === '' || strlen($password) < 6) {
             Response::json(['message' => 'First name, last name, phone, email, username, role, branch, and a password of at least 6 characters are required.'], 422);
+        }
+
+        $branchRecord = $this->branchByName($pdo, $branch);
+        if (!$branchRecord) {
+            Response::json(['message' => 'Choose a valid branch from settings before creating staff.'], 422);
         }
 
         $profileImage = null;
@@ -146,8 +153,8 @@ final class StaffController extends Controller
             $userId = (int) $pdo->lastInsertId();
 
             $insertStaff = $pdo->prepare(
-                'INSERT INTO staff (user_id, first_name, last_name, other_names, phone, role, email, profile_image)
-                 VALUES (:user_id, :first_name, :last_name, :other_names, :phone, :role, :email, :profile_image)'
+                'INSERT INTO staff (user_id, first_name, last_name, other_names, phone, role, email, profile_image, branch, branch_id)
+                 VALUES (:user_id, :first_name, :last_name, :other_names, :phone, :role, :email, :profile_image, :branch, :branch_id)'
             );
             $insertStaff->execute([
                 'user_id' => $userId,
@@ -158,17 +165,20 @@ final class StaffController extends Controller
                 'role' => $role,
                 'email' => $email,
                 'profile_image' => $profileImage,
+                'branch' => $branchRecord['name'],
+                'branch_id' => $branchRecord['id'],
             ]);
 
             $staffId = (int) $pdo->lastInsertId();
 
             $insertBranch = $pdo->prepare(
-                'INSERT INTO staff_branches (staff_id, branch)
-                 VALUES (:staff_id, :branch)'
+                'INSERT INTO staff_branches (staff_id, branch, branch_id)
+                 VALUES (:staff_id, :branch, :branch_id)'
             );
             $insertBranch->execute([
                 'staff_id' => $staffId,
-                'branch' => $branch,
+                'branch' => $branchRecord['name'],
+                'branch_id' => $branchRecord['id'],
             ]);
 
             $pdo->commit();
@@ -190,6 +200,7 @@ final class StaffController extends Controller
 
         $pdo = Database::connection();
         $this->ensureStaffSchema($pdo);
+        $this->ensureBranchesSchema($pdo);
 
         $staffId = (int) ($_POST['staff_id'] ?? 0);
         if ($staffId <= 0) {
@@ -213,6 +224,11 @@ final class StaffController extends Controller
 
         if ($firstName === '' || $lastName === '' || $phone === '' || $email === '' || $username === '' || $role === '' || $branch === '') {
             Response::json(['message' => 'First name, last name, phone, email, username, role, and branch are required.'], 422);
+        }
+
+        $branchRecord = $this->branchByName($pdo, $branch);
+        if (!$branchRecord) {
+            Response::json(['message' => 'Choose a valid branch from settings before updating staff.'], 422);
         }
 
         $profileImage = (string) ($current['profile_image'] ?? '');
@@ -253,7 +269,9 @@ final class StaffController extends Controller
                      phone = :phone,
                      role = :role,
                      email = :email,
-                     profile_image = :profile_image
+                     profile_image = :profile_image,
+                     branch = :branch,
+                     branch_id = :branch_id
                  WHERE id = :staff_id
                  LIMIT 1'
             );
@@ -265,16 +283,19 @@ final class StaffController extends Controller
                 'role' => $role,
                 'email' => $email,
                 'profile_image' => $profileImage !== '' ? $profileImage : null,
+                'branch' => $branchRecord['name'],
+                'branch_id' => $branchRecord['id'],
                 'staff_id' => $staffId,
             ]);
 
             $deleteBranch = $pdo->prepare('DELETE FROM staff_branches WHERE staff_id = :staff_id');
             $deleteBranch->execute(['staff_id' => $staffId]);
 
-            $insertBranch = $pdo->prepare('INSERT INTO staff_branches (staff_id, branch) VALUES (:staff_id, :branch)');
+            $insertBranch = $pdo->prepare('INSERT INTO staff_branches (staff_id, branch, branch_id) VALUES (:staff_id, :branch, :branch_id)');
             $insertBranch->execute([
                 'staff_id' => $staffId,
-                'branch' => $branch,
+                'branch' => $branchRecord['name'],
+                'branch_id' => $branchRecord['id'],
             ]);
 
             $pdo->commit();
@@ -407,6 +428,46 @@ final class StaffController extends Controller
         if (!in_array('profile_image', $columns, true)) {
             $pdo->exec('ALTER TABLE staff ADD COLUMN profile_image VARCHAR(255) DEFAULT NULL AFTER email');
         }
+
+        if (!in_array('branch', $columns, true)) {
+            $pdo->exec('ALTER TABLE staff ADD COLUMN branch VARCHAR(100) DEFAULT NULL AFTER sms_notifications');
+        }
+
+        if (!in_array('branch_id', $columns, true)) {
+            $pdo->exec('ALTER TABLE staff ADD COLUMN branch_id INT(11) DEFAULT NULL AFTER branch');
+        }
+
+        $branchColumns = $pdo->query('SHOW COLUMNS FROM staff_branches')->fetchAll(PDO::FETCH_COLUMN) ?: [];
+        if (!in_array('branch_id', $branchColumns, true)) {
+            $pdo->exec('ALTER TABLE staff_branches ADD COLUMN branch_id INT(11) DEFAULT NULL AFTER branch');
+        }
+    }
+
+    private function ensureBranchesSchema(PDO $pdo): void
+    {
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS branches (
+                id INT(11) NOT NULL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL UNIQUE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+        );
+    }
+
+    private function branchByName(PDO $pdo, string $branch): ?array
+    {
+        $statement = $pdo->prepare(
+            'SELECT id, name
+             FROM branches
+             WHERE LOWER(TRIM(name)) = LOWER(TRIM(:name))
+             LIMIT 1'
+        );
+        $statement->execute(['name' => $branch]);
+        $row = $statement->fetch(PDO::FETCH_ASSOC);
+
+        return $row ? [
+            'id' => (int) ($row['id'] ?? 0),
+            'name' => trim((string) ($row['name'] ?? '')),
+        ] : null;
     }
 
     private function normalizeStaffRole(string $role): string

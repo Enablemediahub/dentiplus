@@ -23,9 +23,10 @@ final class ProcedureChargeController extends Controller
         $this->ensureBillingColumns($pdo);
 
         Response::json([
-            'queueItems' => $this->queueItems($pdo, $role, $staffId),
+            'queueItems' => $role === 'dentist' ? $this->queueItems($pdo, $role, $staffId) : [],
             'procedures' => $this->procedures($pdo),
-            'pendingItems' => $this->pendingItems($pdo, $role, $staffId),
+            'pendingItems' => $role === 'dentist' ? $this->pendingItems($pdo, $role, $staffId) : [],
+            'metrics' => $this->procedureMetrics($pdo),
         ]);
     }
 
@@ -203,6 +204,114 @@ final class ProcedureChargeController extends Controller
             'queueItems' => $this->queueItems($pdo, $role, $staffId),
             'procedures' => $this->procedures($pdo),
             'pendingItems' => $this->pendingItems($pdo, $role, $staffId),
+            'metrics' => $this->procedureMetrics($pdo),
+        ]);
+    }
+
+    public function storeProcedure(): void
+    {
+        $this->requireAdminRole();
+
+        $payload = Request::json();
+        $pdo = Database::connection();
+        $name = trim((string) ($payload['name'] ?? ''));
+        $charge = round((float) ($payload['charge'] ?? 0), 2);
+        $minCharge = round((float) ($payload['min_charge'] ?? 0), 2);
+        $maxCharge = round((float) ($payload['max_charge'] ?? 0), 2);
+
+        $this->validateProcedurePayload($name, $charge, $minCharge, $maxCharge);
+
+        $statement = $pdo->prepare(
+            'INSERT INTO procedures (name, charge, min_charge, max_charge, created_at)
+             VALUES (:name, :charge, :min_charge, :max_charge, CURRENT_TIMESTAMP)'
+        );
+        $statement->execute([
+            'name' => $name,
+            'charge' => $charge,
+            'min_charge' => $minCharge,
+            'max_charge' => $maxCharge,
+        ]);
+
+        Response::json([
+            'message' => 'Procedure added successfully.',
+            'procedures' => $this->procedures($pdo),
+            'metrics' => $this->procedureMetrics($pdo),
+        ]);
+    }
+
+    public function updateProcedure(): void
+    {
+        $this->requireAdminRole();
+
+        $payload = Request::json();
+        $pdo = Database::connection();
+        $id = isset($payload['id']) ? (int) $payload['id'] : 0;
+        $name = trim((string) ($payload['name'] ?? ''));
+        $charge = round((float) ($payload['charge'] ?? 0), 2);
+        $minCharge = round((float) ($payload['min_charge'] ?? 0), 2);
+        $maxCharge = round((float) ($payload['max_charge'] ?? 0), 2);
+
+        if ($id <= 0) {
+            Response::json(['message' => 'Choose a valid procedure to update.'], 422);
+        }
+
+        $this->validateProcedurePayload($name, $charge, $minCharge, $maxCharge);
+
+        if (!$this->procedureById($pdo, $id)) {
+            Response::json(['message' => 'The selected procedure could not be found.'], 404);
+        }
+
+        $statement = $pdo->prepare(
+            'UPDATE procedures
+             SET name = :name,
+                 charge = :charge,
+                 min_charge = :min_charge,
+                 max_charge = :max_charge
+             WHERE id = :id
+             LIMIT 1'
+        );
+        $statement->execute([
+            'id' => $id,
+            'name' => $name,
+            'charge' => $charge,
+            'min_charge' => $minCharge,
+            'max_charge' => $maxCharge,
+        ]);
+
+        Response::json([
+            'message' => 'Procedure updated successfully.',
+            'procedures' => $this->procedures($pdo),
+            'metrics' => $this->procedureMetrics($pdo),
+        ]);
+    }
+
+    public function deleteProcedure(): void
+    {
+        $this->requireAdminRole();
+
+        $payload = Request::json();
+        $pdo = Database::connection();
+        $id = isset($payload['id']) ? (int) $payload['id'] : 0;
+
+        if ($id <= 0) {
+            Response::json(['message' => 'Choose a valid procedure to delete.'], 422);
+        }
+
+        try {
+            $statement = $pdo->prepare('DELETE FROM procedures WHERE id = :id LIMIT 1');
+            $statement->execute(['id' => $id]);
+        } catch (Throwable $exception) {
+            Response::json(['message' => 'Unable to delete this procedure right now.'], 409);
+        }
+
+        if ($statement->rowCount() === 0) {
+            Response::json(['message' => 'The selected procedure could not be found.'], 404);
+        }
+
+        Response::json([
+            'message' => 'Procedure deleted successfully.',
+            'procedures' => $this->procedures($pdo),
+            'metrics' => $this->procedureMetrics($pdo),
         ]);
     }
 
@@ -315,6 +424,30 @@ final class ProcedureChargeController extends Controller
         }, $statement->fetchAll(PDO::FETCH_ASSOC));
     }
 
+    private function procedureMetrics(PDO $pdo): array
+    {
+        $summary = $pdo->query(
+            'SELECT
+                COUNT(*) AS total_procedures,
+                COALESCE(AVG(charge), 0) AS average_charge,
+                COALESCE(MIN(min_charge), 0) AS lowest_entry_charge,
+                COALESCE(MAX(max_charge), 0) AS highest_entry_charge
+             FROM procedures'
+        )->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $wideRangeCount = $pdo->query(
+            'SELECT COUNT(*) FROM procedures WHERE max_charge > min_charge'
+        )->fetchColumn();
+
+        return [
+            'totalProcedures' => (int) ($summary['total_procedures'] ?? 0),
+            'averageCharge' => round((float) ($summary['average_charge'] ?? 0), 2),
+            'lowestEntryCharge' => round((float) ($summary['lowest_entry_charge'] ?? 0), 2),
+            'highestEntryCharge' => round((float) ($summary['highest_entry_charge'] ?? 0), 2),
+            'wideRangeCount' => (int) ($wideRangeCount ?: 0),
+        ];
+    }
+
     private function patientById(PDO $pdo, int $patientId): ?array
     {
         $statement = $pdo->prepare(
@@ -367,6 +500,33 @@ final class ProcedureChargeController extends Controller
             $patient['other_names'] ?? '',
             $patient['last_name'] ?? '',
         ])));
+    }
+
+    private function requireAdminRole(): void
+    {
+        $user = $this->authUser();
+        if ($this->normalizedRole($user) !== 'admin') {
+            Response::json(['message' => 'Only admin users can manage procedure charges.'], 403);
+        }
+    }
+
+    private function validateProcedurePayload(string $name, float $charge, float $minCharge, float $maxCharge): void
+    {
+        if ($name === '') {
+            Response::json(['message' => 'Procedure name is required.'], 422);
+        }
+
+        if ($charge < 0 || $minCharge < 0 || $maxCharge <= 0) {
+            Response::json(['message' => 'Charge values must be zero or greater, and the maximum charge must be above zero.'], 422);
+        }
+
+        if ($minCharge > $charge) {
+            Response::json(['message' => 'The default charge must be greater than or equal to the minimum charge.'], 422);
+        }
+
+        if ($charge > $maxCharge) {
+            Response::json(['message' => 'The default charge cannot exceed the maximum charge.'], 422);
+        }
     }
 
     private function ensureBillingColumns(PDO $pdo): void

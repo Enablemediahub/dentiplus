@@ -75,4 +75,34 @@ abstract class Controller
             $statement->fetchAll(PDO::FETCH_COLUMN) ?: []
         )));
     }
+
+    protected function availableBranchesWithIds(PDO $pdo): array
+    {
+        try {
+            $statement = $pdo->query(
+                "SELECT id, TRIM(name) AS name
+                 FROM branches
+                 WHERE name IS NOT NULL
+                   AND TRIM(name) <> ''
+                 ORDER BY name ASC"
+            );
+
+            $rows = $statement->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            if ($rows !== []) {
+                return array_map(static fn (array $row): array => [
+                    'id' => (int) ($row['id'] ?? 0),
+                    'name' => trim((string) ($row['name'] ?? '')),
+                ], $rows);
+            }
+        } catch (Throwable $exception) {
+            // Fall back to branch names gathered from staff_branches.
+        }
+
+        $names = $this->availableBranchNames($pdo);
+
+        return array_map(static fn (string $name, int $index): array => [
+            'id' => $index + 1,
+            'name' => $name,
+        ], $names, array_keys($names));
+    }
 }

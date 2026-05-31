@@ -112,6 +112,7 @@ export const NAVIGATION = {
         { id: 'staff', label: 'Users & Staff', navLabel: 'Users & Staff', icon: 'briefcase' },
         { id: 'patients', label: 'Patients', navLabel: 'Patients', icon: 'patients' },
         { id: 'appointments', label: 'Appointments', navLabel: 'Appointments', icon: 'calendar' },
+        { id: 'procedure-charge', label: 'Procedure Charges', navLabel: 'Procedure Charges', icon: 'receipt' },
         { id: 'insurance', label: 'Insurance', navLabel: 'Insurance', icon: 'shield' },
         { id: 'store', label: 'Store', navLabel: 'Store', icon: 'inventory' },
       ],

@@ -1,19 +1,8 @@
 
-  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m6097[22m[2m[0m ms[22m
+  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m378[22m[2m[0m ms[22m
 
   [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5176[22m/[39m
   [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.137.1:[1m5176[22m/[39m
   [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.100.4:[1m5176[22m/[39m
-  [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.112.1:[1m5176[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://172.24.64.1:[1m5176[22m/[39m
 [2m[32m  ➜[39m[22m[2m  press [22m[1mh + enter[22m[2m to show help[22m
-[2m6:07:04 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/AdminDatabasePage.jsx[22m
-[2m6:08:52 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/AdminDatabasePage.jsx[22m
-[2m6:09:39 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m
-[2m6:15:59 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/AdminDatabasePage.jsx[22m
-[2m6:58:52 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m
-[2m6:58:52 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m
-[2m7:11:05 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m7:11:05 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
-[2m7:11:14 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/PastReceiptsPage.jsx[22m
-[2m7:41:21 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/AdminDatabasePage.jsx[22m
-[2m7:41:21 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/AdminDatabasePage.jsx[22m

@@ -35,6 +35,7 @@ import { AdminStaffPage } from './components/AdminStaffPage';
 import { AdminDatabasePage } from './components/AdminDatabasePage';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AdminStoreMonitorPage } from './components/AdminStoreMonitorPage';
+import { AdminProcedureChargesPage } from './components/AdminProcedureChargesPage';
 
 const THEME_KEY = 'edental-theme';
 const ADMIN_BRANCH_FILTER_KEY = 'dentiplus-admin-dashboard-branch';
@@ -72,7 +73,7 @@ function useDentiplusPortal() {
     );
 
     if (role === 'admin') {
-      const [dashboard, settings, appointments, patients, billing, messages, expenses, insurance, store, staff, assignments] = await Promise.all([
+      const [dashboard, settings, appointments, patients, billing, messages, expenses, insurance, store, staff, assignments, procedureCharges] = await Promise.all([
         api.dashboard(activeToken, dashboardBranch),
         api.settings(activeToken),
         api.appointments(activeToken, dashboardBranch),
@@ -84,6 +85,7 @@ function useDentiplusPortal() {
         api.store(activeToken, dashboardBranch),
         api.staff(activeToken, dashboardBranch),
         api.assignments(activeToken, dashboardBranch),
+        api.procedureCharges(activeToken),
       ]);
 
       return {
@@ -104,7 +106,7 @@ function useDentiplusPortal() {
           staff,
         },
         assignments,
-        procedureCharges: null,
+        procedureCharges,
       };
     }
 
@@ -424,13 +426,28 @@ function useDentiplusPortal() {
         current
           ? {
               ...current,
-              settings: { ...(current.settings ?? {}), branding: response?.branding ?? null },
+              settings: {
+                ...(current.settings ?? {}),
+                branding: response?.branding ?? null,
+                branches: response?.branches ?? current?.settings?.branches ?? [],
+              },
             }
           : current
       ));
     } finally {
       setSettingsSaving(false);
     }
+  }
+
+  async function handleCreateBranch(values) {
+    if (!token) {
+      throw new Error('Sign in again before adding a branch.');
+    }
+
+    const response = await api.createBranch(token, values);
+    await refreshAdminWorkspace(token);
+
+    return response;
   }
 
   async function handleCreateAppointment(values) {
@@ -484,6 +501,39 @@ function useDentiplusPortal() {
 
     const response = await api.createProcedureCharge(token, values);
     await refreshDentistWorkspace(token);
+
+    return response;
+  }
+
+  async function handleCreateProcedureCatalog(values) {
+    if (!token) {
+      throw new Error('Sign in again before adding a procedure.');
+    }
+
+    const response = await api.createProcedureCatalog(token, values);
+    await refreshAdminWorkspace(token);
+
+    return response;
+  }
+
+  async function handleUpdateProcedureCatalog(values) {
+    if (!token) {
+      throw new Error('Sign in again before updating a procedure.');
+    }
+
+    const response = await api.updateProcedureCatalog(token, values);
+    await refreshAdminWorkspace(token);
+
+    return response;
+  }
+
+  async function handleDeleteProcedureCatalog(values) {
+    if (!token) {
+      throw new Error('Sign in again before deleting a procedure.');
+    }
+
+    const response = await api.deleteProcedureCatalog(token, values);
+    await refreshAdminWorkspace(token);
 
     return response;
   }
@@ -906,6 +956,9 @@ function useDentiplusPortal() {
     handleAssignPatient,
     handleCompleteAssignment,
     handleCreateProcedureCharge,
+    handleCreateProcedureCatalog,
+    handleUpdateProcedureCatalog,
+    handleDeleteProcedureCatalog,
     handleCreateBillingPayment,
     handleCreateFrontdeskBill,
     handleDeleteBilling,
@@ -944,6 +997,7 @@ function useDentiplusPortal() {
     handleDeleteStoreItem,
     handleProcessStoreSale,
     handleSaveSettings,
+    handleCreateBranch,
   };
 }
 
@@ -959,6 +1013,9 @@ function AppWorkspace({
   onAssignPatient,
   onCompleteAssignment,
   onCreateProcedureCharge,
+  onCreateProcedureCatalog,
+  onUpdateProcedureCatalog,
+  onDeleteProcedureCatalog,
   onCreateBillingPayment,
   onCreateFrontdeskBill,
   onDeleteBilling,
@@ -995,6 +1052,7 @@ function AppWorkspace({
   onUpdateMedicalRecord,
   onCreatePrescription,
   onUpdatePrescription,
+  onCreateBranch,
   branding,
   onSaveSettings,
   settingsSaving,
@@ -1308,6 +1366,13 @@ function AppWorkspace({
           data={procedureChargesData}
           onCreateProcedureCharge={onCreateProcedureCharge}
         />
+      ) : role === 'admin' ? (
+        <AdminProcedureChargesPage
+          data={procedureChargesData}
+          onCreateProcedureCatalog={onCreateProcedureCatalog}
+          onDeleteProcedureCatalog={onDeleteProcedureCatalog}
+          onUpdateProcedureCatalog={onUpdateProcedureCatalog}
+        />
       ) : (
         <FormPanel
           title="Procedure Charges"
@@ -1607,6 +1672,7 @@ function AppWorkspace({
     ),
     staff: (
       <AdminStaffPage
+        branches={portalData?.settings?.branches ?? portalData?.staff?.branches ?? []}
         currentUserId={portalData?.session?.user?.staff_id ?? null}
         onCreateStaff={onCreateStaff}
         onDeleteStaff={onDeleteStaff}
@@ -1629,7 +1695,13 @@ function AppWorkspace({
       />
     ),
     settings: role === 'admin' ? (
-      <SettingsPanel branding={branding} onSave={onSaveSettings} saving={settingsSaving} />
+      <SettingsPanel
+        branches={portalData?.settings?.branches ?? []}
+        branding={branding}
+        onCreateBranch={onCreateBranch}
+        onSave={onSaveSettings}
+        saving={settingsSaving}
+      />
     ) : (
       <FormPanel
         title="Clinic settings"
@@ -1758,6 +1830,10 @@ export default function App() {
     handleLogout,
     handleRegisterPatient,
     handleSaveSettings,
+    handleCreateProcedureCatalog,
+    handleUpdateProcedureCatalog,
+    handleDeleteProcedureCatalog,
+    handleCreateBranch,
   } = useDentiplusPortal();
 
   useEffect(() => {
@@ -1800,6 +1876,9 @@ export default function App() {
       onCreatePrescription={handleCreatePrescription}
       onUpdatePrescription={handleUpdatePrescription}
       onCreateProcedureCharge={handleCreateProcedureCharge}
+      onCreateProcedureCatalog={handleCreateProcedureCatalog}
+      onUpdateProcedureCatalog={handleUpdateProcedureCatalog}
+      onDeleteProcedureCatalog={handleDeleteProcedureCatalog}
       onCompleteAssignment={handleCompleteAssignment}
       onLoadMedicalRecords={handleLoadMedicalRecords}
       onLoadPrescriptions={handleLoadPrescriptions}
@@ -1831,6 +1910,7 @@ export default function App() {
       onUpdateStoreItem={handleUpdateStoreItem}
       onDeleteStoreItem={handleDeleteStoreItem}
       onProcessStoreSale={handleProcessStoreSale}
+      onCreateBranch={handleCreateBranch}
       onLogout={handleLogout}
       onRegisterPatient={handleRegisterPatient}
       onSaveSettings={handleSaveSettings}

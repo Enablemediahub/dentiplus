@@ -16,10 +16,12 @@ final class SettingsController extends Controller
     {
         $pdo = Database::connection();
         $this->ensureSettingsSchema($pdo);
+        $this->ensureBranchesSchema($pdo);
         $settings = $this->latestSettings($pdo);
 
         Response::json([
             'branding' => $this->brandingPayload($settings),
+            'branches' => $this->branchesPayload($pdo),
         ]);
     }
 
@@ -33,6 +35,7 @@ final class SettingsController extends Controller
 
         $pdo = Database::connection();
         $this->ensureSettingsSchema($pdo);
+        $this->ensureBranchesSchema($pdo);
         $current = $this->latestSettings($pdo);
 
         $clinicName = trim((string) ($_POST['clinic_name'] ?? $current['clinic_name'] ?? ''));
@@ -105,6 +108,43 @@ final class SettingsController extends Controller
         Response::json([
             'message' => 'Settings updated successfully.',
             'branding' => $this->brandingPayload($this->latestSettings($pdo)),
+            'branches' => $this->branchesPayload($pdo),
+        ]);
+    }
+
+    public function storeBranch(): void
+    {
+        $user = $this->authUser();
+
+        if ($this->normalizedRole($user) !== 'admin') {
+            Response::json(['message' => 'Only admin users can add branches.'], 403);
+        }
+
+        $pdo = Database::connection();
+        $this->ensureBranchesSchema($pdo);
+        $payload = \App\Support\Request::json();
+        $name = trim((string) ($payload['name'] ?? ''));
+
+        if ($name === '') {
+            Response::json(['message' => 'Branch name is required.'], 422);
+        }
+
+        $existing = $pdo->prepare('SELECT id FROM branches WHERE LOWER(TRIM(name)) = LOWER(TRIM(:name)) LIMIT 1');
+        $existing->execute(['name' => $name]);
+        if ($existing->fetch(PDO::FETCH_ASSOC)) {
+            Response::json(['message' => 'That branch already exists.'], 409);
+        }
+
+        $nextId = (int) ($pdo->query('SELECT COALESCE(MAX(id), 0) + 1 FROM branches')->fetchColumn() ?: 1);
+        $statement = $pdo->prepare('INSERT INTO branches (id, name) VALUES (:id, :name)');
+        $statement->execute([
+            'id' => $nextId,
+            'name' => $name,
+        ]);
+
+        Response::json([
+            'message' => 'Branch added successfully.',
+            'branches' => $this->branchesPayload($pdo),
         ]);
     }
 
@@ -165,6 +205,21 @@ final class SettingsController extends Controller
         if (!in_array('sidebar_logo', $columns, true)) {
             $pdo->exec('ALTER TABLE settings ADD COLUMN sidebar_logo VARCHAR(255) DEFAULT NULL AFTER hero_image');
         }
+    }
+
+    private function ensureBranchesSchema(PDO $pdo): void
+    {
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS branches (
+                id INT(11) NOT NULL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL UNIQUE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+        );
+    }
+
+    private function branchesPayload(PDO $pdo): array
+    {
+        return $this->availableBranchesWithIds($pdo);
     }
 
     private function storeUpload(array $file, string $prefix): string

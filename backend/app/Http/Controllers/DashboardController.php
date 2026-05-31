@@ -518,17 +518,6 @@ final class DashboardController extends Controller
 
     private function availableBranches(PDO $pdo): array
     {
-        $statement = $pdo->query(
-            "SELECT DISTINCT branch
-             FROM staff_branches
-             WHERE branch IS NOT NULL
-               AND branch <> ''
-             ORDER BY branch ASC"
-        );
-
-        return array_values(array_filter(array_map(
-            static fn ($value): string => trim((string) $value),
-            $statement->fetchAll(PDO::FETCH_COLUMN) ?: []
-        )));
+        return $this->availableBranchNames($pdo);
     }
 }

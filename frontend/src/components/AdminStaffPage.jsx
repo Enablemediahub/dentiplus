@@ -36,7 +36,7 @@ function createStaffForm(item) {
     email: item?.email ?? '',
     username: item?.username ?? '',
     role: item?.role ?? 'Receptionist',
-    branch: item?.branch ?? 'Main clinic',
+    branch: item?.branch ?? '',
     isActive: item?.isActive ?? true,
     password: '',
     profileImage: null,
@@ -62,6 +62,7 @@ function StaffManagementModal({
   showPassword,
   toggleNewPassword,
   togglePassword,
+  branches,
 }) {
   if (!isOpen || !form) {
     return null;
@@ -147,7 +148,12 @@ function StaffManagementModal({
                     </label>
                     <label className="field-block">
                       <span>Branch</span>
-                      <input name="branch" onChange={onChange} required type="text" value={form.branch} />
+                      <select name="branch" onChange={onChange} required value={form.branch}>
+                        <option value="">Select branch</option>
+                        {branches.map((branch) => (
+                          <option key={branch.id} value={branch.name}>{branch.name}</option>
+                        ))}
+                      </select>
                     </label>
                     <label className="field-block">
                       <span>Status</span>
@@ -242,6 +248,7 @@ function StaffManagementModal({
 }
 
 export function AdminStaffPage({
+  branches = [],
   currentUserId,
   onCreateStaff,
   onDeleteStaff,
@@ -493,6 +500,7 @@ export function AdminStaffPage({
               <tr>
                 <th>Profile</th>
                 <th>Name</th>
+                <th>Phone</th>
                 <th>Role</th>
                 <th>Branch</th>
                 <th>Status</th>
@@ -516,6 +524,7 @@ export function AdminStaffPage({
                     <strong>{item.name}</strong>
                     <span className="table-subcopy">{item.username} | {item.email}</span>
                   </td>
+                  <td>{item.phone || '-'}</td>
                   <td>{item.role}</td>
                   <td>{item.branch}</td>
                   <td>{item.status}</td>
@@ -528,7 +537,7 @@ export function AdminStaffPage({
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan="7">No staff records match the current search and filters.</td>
+                  <td colSpan="8">No staff records match the current search and filters.</td>
                 </tr>
               )}
             </tbody>
@@ -553,6 +562,7 @@ export function AdminStaffPage({
       </section>
 
       <StaffManagementModal
+        branches={branches}
         currentUserId={currentUserId}
         deleting={deleting}
         feedback={feedback}
