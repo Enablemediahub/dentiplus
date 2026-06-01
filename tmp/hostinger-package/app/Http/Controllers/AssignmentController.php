@@ -49,32 +49,57 @@ final class AssignmentController extends Controller
             Response::json(['message' => 'The selected dentist is not available for your branch.'], 422);
         }
 
-        $existing = $pdo->prepare('SELECT id FROM patient_assignments WHERE patient_id = :patient_id AND status = :status LIMIT 1');
+        $existing = $pdo->prepare(
+            'SELECT id
+             FROM patient_assignments
+             WHERE patient_id = :patient_id
+               AND status = :status
+             ORDER BY id DESC
+             LIMIT 1'
+        );
         $existing->execute([
             'patient_id' => $patientId,
             'status' => 'waiting',
         ]);
-        if ($existing->fetchColumn()) {
-            Response::json(['message' => 'This patient is already in the waiting queue.'], 422);
-        }
+        $existingAssignmentId = (int) ($existing->fetchColumn() ?: 0);
 
         $pdo->beginTransaction();
 
         try {
             $assignmentTime = date('Y-m-d H:i:s');
 
-            $insert = $pdo->prepare(
-                'INSERT INTO patient_assignments (patient_id, dentist_id, receptionist_id, assignment_visit_reason, assignment_time, status)
-                 VALUES (:patient_id, :dentist_id, :receptionist_id, :assignment_visit_reason, :assignment_time, :status)'
-            );
-            $insert->execute([
-                'patient_id' => $patientId,
-                'dentist_id' => $dentistId,
-                'receptionist_id' => $staffId,
-                'assignment_visit_reason' => $visitReason,
-                'assignment_time' => $assignmentTime,
-                'status' => 'waiting',
-            ]);
+            if ($existingAssignmentId > 0) {
+                $updateAssignment = $pdo->prepare(
+                    'UPDATE patient_assignments
+                     SET dentist_id = :dentist_id,
+                         receptionist_id = :receptionist_id,
+                         assignment_visit_reason = :assignment_visit_reason,
+                         assignment_time = :assignment_time
+                     WHERE id = :id
+                       AND status = :status'
+                );
+                $updateAssignment->execute([
+                    'dentist_id' => $dentistId,
+                    'receptionist_id' => $staffId,
+                    'assignment_visit_reason' => $visitReason,
+                    'assignment_time' => $assignmentTime,
+                    'id' => $existingAssignmentId,
+                    'status' => 'waiting',
+                ]);
+            } else {
+                $insert = $pdo->prepare(
+                    'INSERT INTO patient_assignments (patient_id, dentist_id, receptionist_id, assignment_visit_reason, assignment_time, status)
+                     VALUES (:patient_id, :dentist_id, :receptionist_id, :assignment_visit_reason, :assignment_time, :status)'
+                );
+                $insert->execute([
+                    'patient_id' => $patientId,
+                    'dentist_id' => $dentistId,
+                    'receptionist_id' => $staffId,
+                    'assignment_visit_reason' => $visitReason,
+                    'assignment_time' => $assignmentTime,
+                    'status' => 'waiting',
+                ]);
+            }
 
             $updatePatient = $pdo->prepare(
                 'UPDATE patients
@@ -99,7 +124,7 @@ final class AssignmentController extends Controller
         }
 
         Response::json([
-            'message' => 'Patient assigned successfully.',
+            'message' => $existingAssignmentId > 0 ? 'Patient assignment updated successfully.' : 'Patient assigned successfully.',
             'items' => $this->activeAssignments($pdo, $role, $staffId, $branch),
             'candidatePatients' => $this->candidatePatients($pdo, $role, $staffId, $branch),
             'dentists' => $this->dentists($pdo, $role, $staffId, $branch),
@@ -252,11 +277,17 @@ final class AssignmentController extends Controller
                 COALESCE(p.assignment_visit_reason, p.visit_reason, 'General care') AS visit_reason,
                 p.status,
                 p.receptionist_id,
+                pa.id AS active_assignment_id,
+                pa.assignment_visit_reason AS active_assignment_visit_reason,
+                ds.first_name AS dentist_first_name,
+                ds.last_name AS dentist_last_name,
+                ds.other_names AS dentist_other_names,
                 sb.branch
             FROM patients p
             LEFT JOIN patient_assignments pa ON pa.patient_id = p.id AND pa.status = 'waiting'
+            LEFT JOIN staff ds ON ds.id = pa.dentist_id
             LEFT JOIN staff_branches sb ON sb.staff_id = p.receptionist_id
-            WHERE pa.id IS NULL";
+            WHERE 1=1";
 
         $params = [];
 
@@ -265,12 +296,7 @@ final class AssignmentController extends Controller
             $params['branch'] = $branch;
         }
 
-        if ($role === 'receptionist' && $staffId > 0) {
-            $sql .= ' AND (p.receptionist_id = :receptionist_id OR p.receptionist_id IS NULL)';
-            $params['receptionist_id'] = $staffId;
-        }
-
-        $sql .= " ORDER BY p.status = 'waiting' DESC, p.created_at DESC";
+        $sql .= " ORDER BY pa.id IS NOT NULL DESC, p.status = 'waiting' DESC, p.created_at DESC";
 
         $statement = $pdo->prepare($sql);
         $statement->execute($params);
@@ -288,7 +314,14 @@ final class AssignmentController extends Controller
                 'oldFolderId' => (string) ($row['old_folder_id'] ?? ''),
                 'patientName' => $name,
                 'phone' => (string) ($row['phone'] ?? ''),
-                'visitReason' => (string) ($row['visit_reason'] ?? 'General care'),
+                'visitReason' => (string) (($row['active_assignment_visit_reason'] ?? '') ?: ($row['visit_reason'] ?? 'General care')),
+                'assignmentId' => isset($row['active_assignment_id']) ? (int) $row['active_assignment_id'] : null,
+                'dentistName' => !empty($row['dentist_first_name']) ? Auth::staffDisplayName([
+                    'first_name' => $row['dentist_first_name'] ?? '',
+                    'last_name' => $row['dentist_last_name'] ?? '',
+                    'other_names' => $row['dentist_other_names'] ?? '',
+                    'staff_role' => 'dentist',
+                ]) : 'Unassigned',
                 'status' => ucfirst((string) ($row['status'] ?? 'registered')),
             ];
         }, $statement->fetchAll(PDO::FETCH_ASSOC));

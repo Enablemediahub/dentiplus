@@ -1,5 +1,7 @@
 import React from 'react';
+import { DateInputField } from './DateInputField';
 import { PortalIcon } from './PortalIcon';
+import { displayDateToIso, isoToDisplayDate, normalizeDateEntry } from '../lib/dateInput';
 
 function formatPhoneNumber(value) {
   const digits = String(value ?? '').replace(/\D/g, '');
@@ -123,7 +125,7 @@ function PatientRecordModal({
               </label>
               <label className="field-block">
                 <span>Birth date</span>
-                <input name="birth_date" onChange={onChange} required type="date" value={patient.birth_date} />
+                <DateInputField name="birth_date" onChange={onChange} placeholder="dd/mm/yyyy" required value={patient.birth_date} />
               </label>
               <label className="field-block">
                 <span>Gender</span>
@@ -215,7 +217,7 @@ export function ReceptionPatientDatabasePage({
       last_name: patient.lastName ?? '',
       phone: patient.phone ?? '',
       email: patient.email ?? '',
-      birth_date: patient.birthDate ?? '',
+      birth_date: isoToDisplayDate(patient.birthDate ?? ''),
       gender: String(patient.gender ?? 'male').toLowerCase() || 'male',
       address: patient.address ?? '',
       old_folder_id: patient.oldFolderId ?? '',
@@ -228,7 +230,11 @@ export function ReceptionPatientDatabasePage({
     const { name, value } = event.target;
     setForm((current) => ({
       ...current,
-      [name]: ['birth_date', 'gender', 'status', 'phone', 'email'].includes(name) ? value : normalizeLeadingUppercase(value),
+      [name]: name === 'birth_date'
+        ? normalizeDateEntry(value)
+        : ['gender', 'status', 'phone', 'email'].includes(name)
+          ? value
+          : normalizeLeadingUppercase(value),
     }));
   }
 
@@ -241,7 +247,15 @@ export function ReceptionPatientDatabasePage({
     setSaving(true);
     setFeedback('');
     try {
-      const response = await onUpdatePatient(form);
+      const birthDate = displayDateToIso(form.birth_date);
+      if (!birthDate) {
+        throw new Error('Birth date must use the dd/mm/yyyy format.');
+      }
+
+      const response = await onUpdatePatient({
+        ...form,
+        birth_date: birthDate,
+      });
       setActivePatient(response?.item ?? null);
       setForm((current) => current ? ({
         ...current,
@@ -250,7 +264,7 @@ export function ReceptionPatientDatabasePage({
         last_name: response?.item?.lastName ?? current.last_name,
         phone: response?.item?.phone ?? current.phone,
         email: response?.item?.email ?? current.email,
-        birth_date: response?.item?.birthDate ?? current.birth_date,
+        birth_date: isoToDisplayDate(response?.item?.birthDate ?? current.birth_date),
         gender: String(response?.item?.gender ?? current.gender).toLowerCase(),
         address: response?.item?.address ?? current.address,
         old_folder_id: response?.item?.oldFolderId ?? current.old_folder_id,

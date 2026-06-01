@@ -1,5 +1,7 @@
 import React from 'react';
+import { DateInputField } from './DateInputField';
 import { PortalIcon } from './PortalIcon';
+import { displayDateToIso, formatDateRangeLabel, isoToDisplayDate, normalizeDateEntry } from '../lib/dateInput';
 
 function formatCurrency(value) {
   return `GHS ${Number(value ?? 0).toLocaleString(undefined, {
@@ -31,20 +33,27 @@ function getReceiptDentistLabel(receipt) {
 }
 
 function normalizeDateOnly(value) {
-  return String(value ?? '').slice(0, 10);
+  const text = String(value ?? '').trim();
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(text)) {
+    return displayDateToIso(text);
+  }
+
+  return text.slice(0, 10);
 }
 
 function inDateRange(value, startDate, endDate) {
   const dateValue = normalizeDateOnly(value);
+  const startValue = normalizeDateOnly(startDate);
+  const endValue = normalizeDateOnly(endDate);
   if (!dateValue) {
     return false;
   }
 
-  if (startDate && dateValue < startDate) {
+  if (startDate && (!startValue || dateValue < startValue)) {
     return false;
   }
 
-  if (endDate && dateValue > endDate) {
+  if (endDate && (!endValue || dateValue > endValue)) {
     return false;
   }
 
@@ -199,7 +208,7 @@ function openPrintableReport(title, subtitle, columns, rows, totals = []) {
   popup.document.close();
 }
 
-function printThermalReceipt(receipt) {
+export function printThermalReceipt(receipt) {
   const popup = window.open('', '_blank', 'width=420,height=720');
   if (!popup) {
     return;
@@ -459,7 +468,7 @@ function FrontdeskBillingModal({ isOpen, onClose, onSubmit, patients }) {
   );
 }
 
-function ReceiptPreviewModal({ isOpen, onClose, onPrint, receipt }) {
+export function ReceiptPreviewModal({ isOpen, onClose, onPrint, receipt }) {
   if (!isOpen || !receipt) {
     return null;
   }
@@ -664,8 +673,7 @@ function ReceiptHistoryModal({ history, isOpen, onClose, onReprint, receiptLoadi
   );
 }
 
-function PaymentProcessingModal({ bill, isOpen, onClose, onSubmit, onPaymentSaved }) {
-  const [status, setStatus] = React.useState('partially_paid');
+export function PaymentProcessingModal({ bill, isOpen, onClose, onSubmit, onPaymentSaved }) {
   const [payments, setPayments] = React.useState([{ method: 'cash', amount: '', transaction_id: '' }]);
   const [insurance, setInsurance] = React.useState({
     insurance_type: '',
@@ -685,7 +693,6 @@ function PaymentProcessingModal({ bill, isOpen, onClose, onSubmit, onPaymentSave
       return;
     }
 
-    setStatus(billBalance > 0 ? 'partially_paid' : 'completed');
     setPayments([{ method: 'cash', amount: '', transaction_id: '' }]);
     setInsurance({
       insurance_type: '',
@@ -729,18 +736,9 @@ function PaymentProcessingModal({ bill, isOpen, onClose, onSubmit, onPaymentSave
   const remainingBalance = Math.max(0, billBalance - totalEntered);
   const enteredTotalLabel = formatCurrency(totalEntered);
   const remainingBalanceLabel = formatCurrency(remainingBalance);
-
-  React.useEffect(() => {
-    if (!bill || status === 'rejected') {
-      return;
-    }
-
-    const nextStatus = totalEntered > 0 && totalEntered >= billBalance - 0.01
-      ? 'completed'
-      : 'partially_paid';
-
-    setStatus((current) => (current === nextStatus ? current : nextStatus));
-  }, [bill, status, totalEntered]);
+  const resolvedStatus = totalEntered > 0 && totalEntered >= billBalance - 0.01
+    ? 'completed'
+    : 'partially_paid';
 
   if (!isOpen || !bill) {
     return null;
@@ -749,50 +747,51 @@ function PaymentProcessingModal({ bill, isOpen, onClose, onSubmit, onPaymentSave
   async function handleSubmit(event) {
     event.preventDefault();
 
-    if (status !== 'rejected') {
-      if (totalEntered <= 0) {
-        setFeedback('Enter a payment amount greater than zero before issuing a receipt.');
-        return;
-      }
+    if (totalEntered <= 0) {
+      setFeedback('Enter a payment amount greater than zero before issuing a receipt.');
+      return;
+    }
 
-      if (totalEntered > billBalance + 0.01) {
-        setFeedback('Total paid amount cannot exceed the remaining bill balance.');
-        return;
-      }
+    if (totalEntered > billBalance + 0.01) {
+      setFeedback('Total paid amount cannot exceed the remaining bill balance.');
+      return;
+    }
 
-      if (payments.some((entry) => getEffectivePaymentAmount(entry) <= 0)) {
-        setFeedback('Each payment line must have an amount greater than zero.');
-        return;
-      }
+    if (payments.some((entry) => getEffectivePaymentAmount(entry) <= 0)) {
+      setFeedback('Each payment line must have an amount greater than zero.');
+      return;
+    }
 
-      if (requiresReference) {
-        setFeedback('Transaction ID is required for Mobile Money and Card payments.');
-        return;
-      }
+    if (requiresReference) {
+      setFeedback('Transaction ID is required for Mobile Money and Card payments.');
+      return;
+    }
 
-      if (
-        usesInsurance &&
-        (
-          !String(insurance.insurance_type ?? '').trim() ||
-          !String(insurance.insurance_number ?? '').trim() ||
-          !String(insurance.expiry_date ?? '').trim() ||
-          Number(insurance.insurance_covered_amount || 0) <= 0
-        )
-      ) {
-        setFeedback('Insurance type, number, expiry date, and covered amount are required for insurance payments.');
-        return;
-      }
+    if (
+      usesInsurance &&
+      (
+        !String(insurance.insurance_type ?? '').trim() ||
+        !String(insurance.insurance_number ?? '').trim() ||
+        !String(insurance.expiry_date ?? '').trim() ||
+        Number(insurance.insurance_covered_amount || 0) <= 0
+      )
+    ) {
+      setFeedback('Insurance type, number, expiry date, and covered amount are required for insurance payments.');
+      return;
     }
 
     setSaving(true);
     setFeedback('');
 
     try {
+      const insuranceExpiryDate = usesInsurance ? displayDateToIso(insurance.expiry_date) : '';
+      if (usesInsurance && !insuranceExpiryDate) {
+        throw new Error('Insurance expiry date must use the dd/mm/yyyy format.');
+      }
+
       const response = await onSubmit({
         billing_id: bill.billingId,
-        status: status === 'rejected'
-          ? 'rejected'
-          : (totalEntered >= billBalance - 0.01 ? 'completed' : 'partially_paid'),
+        status: resolvedStatus,
         payments: payments.map((entry) => ({
           method: entry.method,
           amount: getEffectivePaymentAmount(entry),
@@ -800,6 +799,7 @@ function PaymentProcessingModal({ bill, isOpen, onClose, onSubmit, onPaymentSave
         })),
         insurance: {
           ...insurance,
+          expiry_date: insuranceExpiryDate,
           insurance_covered_amount: Number(insurance.insurance_covered_amount),
         },
       });
@@ -874,22 +874,11 @@ function PaymentProcessingModal({ bill, isOpen, onClose, onSubmit, onPaymentSave
             </div>
           </div>
 
-          <label className="field-block">
-            <span>Payment status</span>
-            <select onChange={(event) => setStatus(event.target.value)} value={status}>
-              <option value="partially_paid">Partially paid</option>
-              <option value="completed">Completed</option>
-              <option value="rejected">Rejected</option>
-            </select>
-          </label>
+          <p className="table-subcopy" style={{ marginTop: '-4px' }}>
+            Payment status is now detected automatically from the total entered against the current bill balance.
+          </p>
 
-          {status !== 'rejected' ? (
-            <p className="table-subcopy" style={{ marginTop: '-4px' }}>
-              The payment status adjusts automatically from the amount entered so the receipt can process smoothly.
-            </p>
-          ) : null}
-
-          {status !== 'rejected' ? payments.map((entry, index) => (
+          {payments.map((entry, index) => (
             <div className="workspace-form-section" key={`payment-line-${index}`}>
               <div className="panel-heading workspace-history-record__header">
                 <div>
@@ -934,65 +923,74 @@ function PaymentProcessingModal({ bill, isOpen, onClose, onSubmit, onPaymentSave
                   <input onChange={(event) => updatePayment(index, 'transaction_id', event.target.value)} placeholder="Required for Mobile Money or Card" type="text" value={entry.transaction_id} />
                 </label>
               </div>
-            </div>
-          )) : null}
 
-          {status !== 'rejected' ? (
-            <button className="ghost-button workspace-inline-action" onClick={addPaymentLine} type="button">
-              <PortalIcon className="workspace-submit-icon" name="plus-square" />
-              <span>Add another payment method</span>
-            </button>
-          ) : null}
-
-          {usesInsurance ? (
-            <div className="workspace-form-section">
-              <h4>Insurance details</h4>
-              <div className="form-grid">
-                <label className="field-block">
-                  <span>Insurance type</span>
-                  <select onChange={(event) => setInsurance((current) => ({ ...current, insurance_type: event.target.value }))} value={insurance.insurance_type}>
-                    <option value="">Choose insurance type</option>
-                    <option value="Cosmopolitan Health Insurance">Cosmopolitan Health Insurance</option>
-                    <option value="Equity Health Insurance">Equity Health Insurance</option>
-                    <option value="Glico">Glico</option>
-                    <option value="Premier Health Insurance">Premier Health Insurance</option>
-                    <option value="Acacia">Acacia</option>
-                    <option value="Metropolitan">Metropolitan</option>
-                    <option value="ACE Health Insurance">ACE Health Insurance</option>
-                    <option value="GAB Insurance">GAB Insurance</option>
-                  </select>
-                </label>
-                <label className="field-block">
-                  <span>Covered amount</span>
-                  <input min="0" onChange={(event) => setInsurance((current) => ({ ...current, insurance_covered_amount: event.target.value }))} placeholder="0.00" step="0.01" type="number" value={insurance.insurance_covered_amount} />
-                </label>
-                <label className="field-block">
-                  <span>Insurance number</span>
-                  <input onChange={(event) => setInsurance((current) => ({ ...current, insurance_number: event.target.value }))} placeholder="Membership or card number" type="text" value={insurance.insurance_number} />
-                </label>
-                <label className="field-block">
-                  <span>Expiry date</span>
-                  <input onChange={(event) => setInsurance((current) => ({ ...current, expiry_date: event.target.value }))} type="date" value={insurance.expiry_date} />
-                </label>
-                <label className="field-block">
-                  <span>Company</span>
-                  <input onChange={(event) => setInsurance((current) => ({ ...current, company: event.target.value }))} placeholder="Optional company" type="text" value={insurance.company} />
-                </label>
-                <label className="field-block">
-                  <span>Category</span>
-                  <input onChange={(event) => setInsurance((current) => ({ ...current, insurance_category: event.target.value }))} placeholder="Benefit category" type="text" value={insurance.insurance_category} />
-                </label>
-              </div>
+              {entry.method === 'insurance' ? (
+                <div className="workspace-form-section workspace-subsection">
+                  <h4>Insurance details</h4>
+                  <div className="form-grid">
+                    <label className="field-block">
+                      <span>Insurance type</span>
+                      <select onChange={(event) => setInsurance((current) => ({ ...current, insurance_type: event.target.value }))} value={insurance.insurance_type}>
+                        <option value="">Choose insurance type</option>
+                        <option value="Cosmopolitan Health Insurance">Cosmopolitan Health Insurance</option>
+                        <option value="Equity Health Insurance">Equity Health Insurance</option>
+                        <option value="Glico">Glico</option>
+                        <option value="Premier Health Insurance">Premier Health Insurance</option>
+                        <option value="Acacia">Acacia</option>
+                        <option value="Metropolitan">Metropolitan</option>
+                        <option value="ACE Health Insurance">ACE Health Insurance</option>
+                        <option value="GAB Insurance">GAB Insurance</option>
+                      </select>
+                    </label>
+                    <label className="field-block">
+                      <span>Covered amount</span>
+                      <input min="0" onChange={(event) => setInsurance((current) => ({ ...current, insurance_covered_amount: event.target.value }))} placeholder="0.00" step="0.01" type="number" value={insurance.insurance_covered_amount} />
+                    </label>
+                    <label className="field-block">
+                      <span>Insurance number</span>
+                      <input onChange={(event) => setInsurance((current) => ({ ...current, insurance_number: event.target.value }))} placeholder="Membership or card number" type="text" value={insurance.insurance_number} />
+                    </label>
+                    <label className="field-block">
+                      <span>Expiry date</span>
+                      <DateInputField
+                        name="expiry_date"
+                        onChange={(event) => setInsurance((current) => ({ ...current, expiry_date: normalizeDateEntry(event.target.value) }))}
+                        placeholder="dd/mm/yyyy"
+                        value={insurance.expiry_date}
+                      />
+                    </label>
+                    <label className="field-block">
+                      <span>Company</span>
+                      <input onChange={(event) => setInsurance((current) => ({ ...current, company: event.target.value }))} placeholder="Optional company" type="text" value={insurance.company} />
+                    </label>
+                    <label className="field-block">
+                      <span>Category</span>
+                      <input onChange={(event) => setInsurance((current) => ({ ...current, insurance_category: event.target.value }))} placeholder="Benefit category" type="text" value={insurance.insurance_category} />
+                    </label>
+                  </div>
+                </div>
+              ) : null}
             </div>
-          ) : null}
+          ))}
+
+          <button className="ghost-button workspace-inline-action" onClick={addPaymentLine} type="button">
+            <PortalIcon className="workspace-submit-icon" name="plus-square" />
+            <span>Add another payment method</span>
+          </button>
 
           {feedback ? <p className="form-error">{feedback}</p> : null}
 
-          <div className="workspace-card__actions">
+          <div className="workspace-card__actions workspace-card__actions--between payment-processing-actions">
             <button className="primary-button" disabled={saving} type="submit">
               <PortalIcon className="workspace-submit-icon" name="receipt" />
               <span>{saving ? 'Saving payment...' : 'Process payment and issue receipt'}</span>
             </button>
+            <div className="payment-processing-total" aria-live="polite">
+              <span className="payment-processing-total__label">Live balance</span>
+              <strong className="payment-processing-total__value">{remainingBalanceLabel}</strong>
+              <span className="payment-processing-total__label payment-processing-total__label--secondary">Total entered</span>
+              <strong className="payment-processing-total__value payment-processing-total__value--secondary">{enteredTotalLabel}</strong>
+            </div>
           </div>
         </form>
       </div>
@@ -1015,8 +1013,8 @@ export function ReceptionPaymentsPage({
   const [methodFilter, setMethodFilter] = React.useState('all');
   const [billTypeFilter, setBillTypeFilter] = React.useState('all');
   const [statusFilter, setStatusFilter] = React.useState('all');
-  const [startDate, setStartDate] = React.useState(todayDate);
-  const [endDate, setEndDate] = React.useState(todayDate);
+  const [startDate, setStartDate] = React.useState(isoToDisplayDate(todayDate));
+  const [endDate, setEndDate] = React.useState(isoToDisplayDate(todayDate));
   const [billRowsPerPage, setBillRowsPerPage] = React.useState(15);
   const [historyRowsPerPage, setHistoryRowsPerPage] = React.useState(15);
   const [page, setPage] = React.useState(1);
@@ -1093,7 +1091,7 @@ export function ReceptionPaymentsPage({
   });
   const filteredOpenBillBalance = filteredItems.reduce((sum, item) => sum + Number(item.balance ?? 0), 0);
   const selectedRangeLabel = startDate || endDate
-    ? `${startDate || 'Beginning'} to ${endDate || 'Today'}`
+    ? formatDateRangeLabel(startDate, endDate)
     : 'All available dates';
 
   const salesWidgets = [
@@ -1290,11 +1288,11 @@ export function ReceptionPaymentsPage({
           </label>
           <label className="field-block reception-inline-field">
             <span>Start date</span>
-            <input max={endDate || undefined} onChange={(event) => setStartDate(event.target.value)} type="date" value={startDate} />
+            <DateInputField name="start_date" onChange={(event) => setStartDate(normalizeDateEntry(event.target.value))} placeholder="dd/mm/yyyy" value={startDate} />
           </label>
           <label className="field-block reception-inline-field">
             <span>End date</span>
-            <input min={startDate || undefined} onChange={(event) => setEndDate(event.target.value)} type="date" value={endDate} />
+            <DateInputField name="end_date" onChange={(event) => setEndDate(normalizeDateEntry(event.target.value))} placeholder="dd/mm/yyyy" value={endDate} />
           </label>
           <label className="field-block reception-inline-field">
             <span>Open-bill rows</span>

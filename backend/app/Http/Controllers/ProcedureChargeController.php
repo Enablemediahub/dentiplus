@@ -66,54 +66,12 @@ final class ProcedureChargeController extends Controller
 
         $dentistName = Auth::staffDisplayName($dentist, 'dentist');
         $patientName = $this->patientDisplayName($patient);
-        $lineItems = [];
-        $totalAmount = 0.0;
-        $topupNotes = [];
-        $firstProcedureId = 0;
-
-        foreach ($procedures as $entry) {
-            $procedureId = isset($entry['procedure_id']) ? (int) $entry['procedure_id'] : 0;
-            $amount = round((float) ($entry['amount'] ?? 0), 2);
-            $topupNote = trim((string) ($entry['topup_notes'] ?? ''));
-
-            if ($procedureId <= 0 || $amount <= 0) {
-                Response::json(['message' => 'Each selected procedure must have a valid amount.'], 422);
-            }
-
-            $procedure = $this->procedureById($pdo, $procedureId);
-            if (!$procedure) {
-                Response::json(['message' => 'One of the selected procedures could not be found.'], 404);
-            }
-
-            $minCharge = (float) ($procedure['min_charge'] ?? 0);
-            $maxCharge = (float) ($procedure['max_charge'] ?? 0);
-
-            if ($amount < $minCharge) {
-                Response::json(['message' => sprintf('%s must be charged at least GHS %.2f.', (string) ($procedure['name'] ?? 'The procedure'), $minCharge)], 422);
-            }
-
-            if ($amount > $maxCharge && $topupNote === '') {
-                Response::json(['message' => sprintf('%s exceeds the approved range. Add a top-up justification first.', (string) ($procedure['name'] ?? 'This procedure'))], 422);
-            }
-
-            if ($firstProcedureId <= 0) {
-                $firstProcedureId = $procedureId;
-            }
-
-            if ($topupNote !== '') {
-                $topupNotes[] = (string) ($procedure['name'] ?? 'Procedure') . ': ' . $topupNote;
-            }
-
-            $lineItems[] = [
-                'procedure_id' => $procedureId,
-                'name' => (string) ($procedure['name'] ?? ''),
-                'amount' => $amount,
-                'min_charge' => $minCharge,
-                'max_charge' => $maxCharge,
-                'topup_notes' => $topupNote,
-            ];
-            $totalAmount += $amount;
-        }
+        [
+            'line_items' => $lineItems,
+            'total_amount' => $totalAmount,
+            'topup_notes' => $topupNotes,
+            'first_procedure_id' => $firstProcedureId,
+        ] = $this->validatedProcedureLineItems($pdo, $procedures);
 
         $pdo->beginTransaction();
 
@@ -201,6 +159,128 @@ final class ProcedureChargeController extends Controller
 
         Response::json([
             'message' => 'Procedure charges submitted to reception successfully.',
+            'queueItems' => $this->queueItems($pdo, $role, $staffId),
+            'procedures' => $this->procedures($pdo),
+            'pendingItems' => $this->pendingItems($pdo, $role, $staffId),
+            'metrics' => $this->procedureMetrics($pdo),
+        ]);
+    }
+
+    public function updateBilling(): void
+    {
+        $user = $this->authUser();
+        $role = $this->normalizedRole($user);
+        $staffId = isset($user['staff_id']) ? (int) $user['staff_id'] : 0;
+        $pdo = Database::connection();
+        $payload = Request::json();
+
+        $this->ensureBillingColumns($pdo);
+
+        if ($role !== 'dentist' || $staffId <= 0) {
+            Response::json(['message' => 'Only dentists can update procedure-charge bills.'], 403);
+        }
+
+        $billingId = isset($payload['billing_id']) ? (int) $payload['billing_id'] : 0;
+        $notes = trim((string) ($payload['notes'] ?? ''));
+        $procedures = is_array($payload['procedures'] ?? null) ? $payload['procedures'] : [];
+
+        if ($billingId <= 0 || $procedures === []) {
+            Response::json(['message' => 'Choose a valid billing record and at least one procedure line.'], 422);
+        }
+
+        $billing = $this->editableBillingById($pdo, $billingId, $staffId);
+        if (!$billing) {
+            Response::json(['message' => 'The selected procedure-charge bill could not be found.'], 404);
+        }
+
+        if (!$this->canModifyPendingBill($billing)) {
+            Response::json(['message' => 'This bill already has payment activity, so it can no longer be edited here.'], 409);
+        }
+
+        [
+            'line_items' => $lineItems,
+            'total_amount' => $totalAmount,
+            'topup_notes' => $topupNotes,
+            'first_procedure_id' => $firstProcedureId,
+        ] = $this->validatedProcedureLineItems($pdo, $procedures);
+
+        $statement = $pdo->prepare(
+            'UPDATE billing_records
+             SET procedure_id = :procedure_id,
+                 procedures_data = :procedures_data,
+                 amount = :amount,
+                 remaining_amount = :remaining_amount,
+                 notes = :notes,
+                 topup_notes = :topup_notes
+             WHERE id = :id
+               AND dentist_id = :dentist_id
+               AND bill_type = :bill_type
+             LIMIT 1'
+        );
+        $statement->execute([
+            'procedure_id' => $firstProcedureId > 0 ? $firstProcedureId : null,
+            'procedures_data' => json_encode($lineItems, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'amount' => round($totalAmount, 2),
+            'remaining_amount' => round($totalAmount, 2),
+            'notes' => $notes !== '' ? $notes : null,
+            'topup_notes' => $topupNotes !== [] ? implode(' | ', $topupNotes) : null,
+            'id' => $billingId,
+            'dentist_id' => $staffId,
+            'bill_type' => 'procedure_charge',
+        ]);
+
+        Response::json([
+            'message' => 'Procedure-charge bill updated successfully.',
+            'queueItems' => $this->queueItems($pdo, $role, $staffId),
+            'procedures' => $this->procedures($pdo),
+            'pendingItems' => $this->pendingItems($pdo, $role, $staffId),
+            'metrics' => $this->procedureMetrics($pdo),
+        ]);
+    }
+
+    public function deleteBilling(): void
+    {
+        $user = $this->authUser();
+        $role = $this->normalizedRole($user);
+        $staffId = isset($user['staff_id']) ? (int) $user['staff_id'] : 0;
+        $pdo = Database::connection();
+        $payload = Request::json();
+
+        $this->ensureBillingColumns($pdo);
+
+        if ($role !== 'dentist' || $staffId <= 0) {
+            Response::json(['message' => 'Only dentists can delete procedure-charge bills.'], 403);
+        }
+
+        $billingId = isset($payload['billing_id']) ? (int) $payload['billing_id'] : 0;
+        if ($billingId <= 0) {
+            Response::json(['message' => 'Choose a valid procedure-charge bill to delete.'], 422);
+        }
+
+        $billing = $this->editableBillingById($pdo, $billingId, $staffId);
+        if (!$billing) {
+            Response::json(['message' => 'The selected procedure-charge bill could not be found.'], 404);
+        }
+
+        if (!$this->canModifyPendingBill($billing)) {
+            Response::json(['message' => 'This bill already has payment activity, so it can no longer be deleted here.'], 409);
+        }
+
+        $statement = $pdo->prepare(
+            'DELETE FROM billing_records
+             WHERE id = :id
+               AND dentist_id = :dentist_id
+               AND bill_type = :bill_type
+             LIMIT 1'
+        );
+        $statement->execute([
+            'id' => $billingId,
+            'dentist_id' => $staffId,
+            'bill_type' => 'procedure_charge',
+        ]);
+
+        Response::json([
+            'message' => 'Procedure-charge bill deleted successfully.',
             'queueItems' => $this->queueItems($pdo, $role, $staffId),
             'procedures' => $this->procedures($pdo),
             'pendingItems' => $this->pendingItems($pdo, $role, $staffId),
@@ -383,6 +463,7 @@ final class ProcedureChargeController extends Controller
         $statement = $pdo->prepare(
             "SELECT
                 br.id,
+                br.patient_id,
                 br.patient_name,
                 br.amount,
                 br.remaining_amount,
@@ -413,15 +494,125 @@ final class ProcedureChargeController extends Controller
 
             return [
                 'id' => (int) $row['id'],
+                'billingId' => (int) $row['id'],
+                'patientId' => (int) ($row['patient_id'] ?? 0),
                 'patientName' => (string) ($row['patient_name'] ?? 'Unknown patient'),
                 'procedureSummary' => $procedureNames !== [] ? implode(', ', $procedureNames) : 'Not specified',
                 'amount' => (float) ($row['amount'] ?? 0),
                 'remainingAmount' => (float) ($row['remaining_amount'] ?? 0),
+                'amountLabel' => 'GHS ' . number_format((float) ($row['amount'] ?? 0), 2),
+                'remainingAmountLabel' => 'GHS ' . number_format((float) ($row['remaining_amount'] ?? 0), 2),
                 'status' => ucfirst(str_replace('_', ' ', (string) ($row['status'] ?? 'pending'))),
+                'statusValue' => (string) ($row['status'] ?? 'pending'),
                 'dateLabel' => !empty($row['created_at']) ? date('d M Y', strtotime((string) $row['created_at'])) : '',
                 'notes' => (string) ($row['notes'] ?? ''),
+                'proceduresData' => is_array($proceduresData) ? array_map(static fn (array $entry): array => [
+                    'procedure_id' => (int) ($entry['procedure_id'] ?? 0),
+                    'name' => (string) ($entry['name'] ?? ''),
+                    'amount' => round((float) ($entry['amount'] ?? 0), 2),
+                    'topup_notes' => (string) ($entry['topup_notes'] ?? ''),
+                ], $proceduresData) : [],
+                'canEdit' => $this->canModifyPendingBill($row),
+                'canDelete' => $this->canModifyPendingBill($row),
             ];
         }, $statement->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    private function editableBillingById(PDO $pdo, int $billingId, int $staffId): ?array
+    {
+        $statement = $pdo->prepare(
+            "SELECT
+                id,
+                dentist_id,
+                bill_type,
+                amount,
+                remaining_amount,
+                status,
+                procedures_data,
+                notes
+             FROM billing_records
+             WHERE id = :id
+               AND dentist_id = :dentist_id
+               AND bill_type = :bill_type
+             LIMIT 1"
+        );
+        $statement->execute([
+            'id' => $billingId,
+            'dentist_id' => $staffId,
+            'bill_type' => 'procedure_charge',
+        ]);
+
+        $billing = $statement->fetch(PDO::FETCH_ASSOC);
+
+        return $billing ?: null;
+    }
+
+    private function canModifyPendingBill(array $billing): bool
+    {
+        $status = strtolower(trim((string) ($billing['status'] ?? 'pending')));
+        $amount = round((float) ($billing['amount'] ?? 0), 2);
+        $remainingAmount = round((float) ($billing['remaining_amount'] ?? 0), 2);
+
+        return $status === 'pending' && abs($remainingAmount - $amount) <= 0.01;
+    }
+
+    private function validatedProcedureLineItems(PDO $pdo, array $procedures): array
+    {
+        $lineItems = [];
+        $totalAmount = 0.0;
+        $topupNotes = [];
+        $firstProcedureId = 0;
+
+        foreach ($procedures as $entry) {
+            $procedureId = isset($entry['procedure_id']) ? (int) $entry['procedure_id'] : 0;
+            $amount = round((float) ($entry['amount'] ?? 0), 2);
+            $topupNote = trim((string) ($entry['topup_notes'] ?? ''));
+
+            if ($procedureId <= 0 || $amount <= 0) {
+                Response::json(['message' => 'Each selected procedure must have a valid amount.'], 422);
+            }
+
+            $procedure = $this->procedureById($pdo, $procedureId);
+            if (!$procedure) {
+                Response::json(['message' => 'One of the selected procedures could not be found.'], 404);
+            }
+
+            $minCharge = (float) ($procedure['min_charge'] ?? 0);
+            $maxCharge = (float) ($procedure['max_charge'] ?? 0);
+
+            if ($amount < $minCharge) {
+                Response::json(['message' => sprintf('%s must be charged at least GHS %.2f.', (string) ($procedure['name'] ?? 'The procedure'), $minCharge)], 422);
+            }
+
+            if ($amount > $maxCharge && $topupNote === '') {
+                Response::json(['message' => sprintf('%s exceeds the approved range. Add a top-up justification first.', (string) ($procedure['name'] ?? 'This procedure'))], 422);
+            }
+
+            if ($firstProcedureId <= 0) {
+                $firstProcedureId = $procedureId;
+            }
+
+            if ($topupNote !== '') {
+                $topupNotes[] = (string) ($procedure['name'] ?? 'Procedure') . ': ' . $topupNote;
+            }
+
+            $lineItems[] = [
+                'procedure_id' => $procedureId,
+                'name' => (string) ($procedure['name'] ?? ''),
+                'amount' => $amount,
+                'min_charge' => $minCharge,
+                'max_charge' => $maxCharge,
+                'topup_notes' => $topupNote,
+            ];
+            $totalAmount += $amount;
+        }
+
+        return [
+            'line_items' => $lineItems,
+            'total_amount' => $totalAmount,
+            'topup_notes' => $topupNotes,
+            'first_procedure_id' => $firstProcedureId,
+        ];
     }
 
     private function procedureMetrics(PDO $pdo): array

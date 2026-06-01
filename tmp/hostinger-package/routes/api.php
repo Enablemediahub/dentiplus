@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\AppointmentController;
+use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AssignmentController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BillingController;
@@ -24,6 +25,7 @@ return [
         '/api/v1/auth/session' => [AuthController::class, 'session'],
         '/api/v1/dashboard' => [DashboardController::class, 'index'],
         '/api/v1/appointments' => [AppointmentController::class, 'index'],
+        '/api/v1/activity-log' => [ActivityLogController::class, 'index'],
         '/api/v1/patients' => [PatientController::class, 'index'],
         '/api/v1/medical-records' => [ClinicalRecordsController::class, 'medicalRecords'],
         '/api/v1/prescriptions' => [ClinicalRecordsController::class, 'prescriptions'],
@@ -70,6 +72,8 @@ return [
         '/api/v1/prescriptions' => [ClinicalRecordsController::class, 'storePrescription'],
         '/api/v1/prescriptions/update' => [ClinicalRecordsController::class, 'updatePrescription'],
         '/api/v1/procedure-charges' => [ProcedureChargeController::class, 'store'],
+        '/api/v1/procedure-charges/update-billing' => [ProcedureChargeController::class, 'updateBilling'],
+        '/api/v1/procedure-charges/delete-billing' => [ProcedureChargeController::class, 'deleteBilling'],
         '/api/v1/procedure-charges/catalog' => [ProcedureChargeController::class, 'storeProcedure'],
         '/api/v1/procedure-charges/catalog/update' => [ProcedureChargeController::class, 'updateProcedure'],
         '/api/v1/procedure-charges/catalog/delete' => [ProcedureChargeController::class, 'deleteProcedure'],

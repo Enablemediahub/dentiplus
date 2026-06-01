@@ -620,6 +620,7 @@ final class DatabaseAdminController extends Controller
                 'data_type' => $dataType,
                 'nullable' => (string) ($row['IS_NULLABLE'] ?? '') === 'YES',
                 'editable' => $editable,
+                'options' => $this->editorOptionsForColumn($table, $name),
             ];
         }
 
@@ -650,6 +651,25 @@ final class DatabaseAdminController extends Controller
             'has_branch_id' => $metadata['has_branch_id'],
             'date_filter_columns' => $metadata['date_filter_columns'] ?? [],
         ];
+    }
+
+    private function editorOptionsForColumn(string $table, string $column): ?array
+    {
+        $table = strtolower($table);
+        $column = strtolower($column);
+
+        if ($table === 'payments' && $column === 'payment_method') {
+            return [
+                ['value' => 'cash', 'label' => 'Cash'],
+                ['value' => 'mobile_money', 'label' => 'Mobile Money'],
+                ['value' => 'card', 'label' => 'Card'],
+                ['value' => 'paystack', 'label' => 'Paystack'],
+                ['value' => 'bank', 'label' => 'Bank'],
+                ['value' => 'insurance', 'label' => 'Insurance'],
+            ];
+        }
+
+        return null;
     }
 
     private function rankDateFilterColumns(array $columns): array

@@ -1,0 +1,25 @@
+{
+  "name": "Dentiplus",
+  "short_name": "Dentiplus",
+  "description": "Dentiplus is a role-aware dental management workspace for eDental clinics.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#101512",
+  "theme_color": "#101512",
+  "icons": [
+    {
+      "src": "./dentiplus-app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./dentiplus-app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -21,6 +21,7 @@ import { ReceptionAppointmentsPage } from './components/ReceptionAppointmentsPag
 import { ReceptionWalkinPage } from './components/ReceptionWalkinPage';
 import { ReceptionAssignPatientPage } from './components/ReceptionAssignPatientPage';
 import { ReceptionPaymentsPage } from './components/ReceptionPaymentsPage';
+import { ReceptionProcedureBillsPage } from './components/ReceptionProcedureBillsPage';
 import { ReceptionPatientDatabasePage } from './components/ReceptionPatientDatabasePage';
 import { ReceptionCustomerServicePage } from './components/ReceptionCustomerServicePage';
 import { ReceptionInsurancePage } from './components/ReceptionInsurancePage';
@@ -36,6 +37,7 @@ import { AdminDatabasePage } from './components/AdminDatabasePage';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AdminStoreMonitorPage } from './components/AdminStoreMonitorPage';
 import { AdminProcedureChargesPage } from './components/AdminProcedureChargesPage';
+import { AdminDeletionAuditPage } from './components/AdminDeletionAuditPage';
 
 const THEME_KEY = 'edental-theme';
 const ADMIN_BRANCH_FILTER_KEY = 'dentiplus-admin-dashboard-branch';
@@ -73,7 +75,7 @@ function useDentiplusPortal() {
     );
 
     if (role === 'admin') {
-      const [dashboard, settings, appointments, patients, billing, messages, expenses, insurance, store, staff, assignments, procedureCharges] = await Promise.all([
+      const [dashboard, settings, appointments, patients, billing, messages, expenses, insurance, store, staff, assignments, procedureCharges, activityLog] = await Promise.all([
         api.dashboard(activeToken, dashboardBranch),
         api.settings(activeToken),
         api.appointments(activeToken, dashboardBranch),
@@ -86,6 +88,7 @@ function useDentiplusPortal() {
         api.staff(activeToken, dashboardBranch),
         api.assignments(activeToken, dashboardBranch),
         api.procedureCharges(activeToken),
+        api.activityLog(activeToken, dashboardBranch),
       ]);
 
       return {
@@ -104,6 +107,7 @@ function useDentiplusPortal() {
           insurance,
           store,
           staff,
+          activityLog,
         },
         assignments,
         procedureCharges,
@@ -225,6 +229,25 @@ function useDentiplusPortal() {
       window.location.hash = nextHash;
     }
   }, [currentView]);
+
+  useEffect(() => {
+    if (bootState !== 'ready' || !token) {
+      return undefined;
+    }
+
+    const role = normalizeRole(
+      portalData?.session?.user?.staff_role ?? portalData?.session?.user?.role,
+    );
+    if (role !== 'dentist') {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      refreshDentistWorkspace(token).catch(() => {});
+    }, 15000);
+
+    return () => window.clearInterval(intervalId);
+  }, [bootState, token, portalData?.session?.user?.role, portalData?.session?.user?.staff_role]);
 
   useEffect(() => {
     let active = true;
@@ -500,6 +523,28 @@ function useDentiplusPortal() {
     }
 
     const response = await api.createProcedureCharge(token, values);
+    await refreshDentistWorkspace(token);
+
+    return response;
+  }
+
+  async function handleUpdateProcedureChargeBilling(values) {
+    if (!token) {
+      throw new Error('Sign in again before updating procedure charges.');
+    }
+
+    const response = await api.updateProcedureChargeBilling(token, values);
+    await refreshDentistWorkspace(token);
+
+    return response;
+  }
+
+  async function handleDeleteProcedureChargeBilling(values) {
+    if (!token) {
+      throw new Error('Sign in again before deleting procedure charges.');
+    }
+
+    const response = await api.deleteProcedureChargeBilling(token, values);
     await refreshDentistWorkspace(token);
 
     return response;
@@ -1013,6 +1058,9 @@ function AppWorkspace({
   onAssignPatient,
   onCompleteAssignment,
   onCreateProcedureCharge,
+  onUpdateProcedureChargeBilling,
+  onDeleteProcedureChargeBilling,
+  onRefreshProcedureCharges,
   onCreateProcedureCatalog,
   onUpdateProcedureCatalog,
   onDeleteProcedureCatalog,
@@ -1354,6 +1402,21 @@ function AppWorkspace({
         </div>
       )
     ),
+    'procedure-bills': (
+      role === 'receptionist' ? (
+        <ReceptionProcedureBillsPage
+          billing={portalData?.billing}
+          onCreateBillingPayment={onCreateBillingPayment}
+        />
+      ) : (
+        <FormPanel
+          title="Procedure bills"
+          description="This payment lane is reserved for reception."
+          fields={[{ label: 'Note', placeholder: 'Procedure bill processing is available for reception only.', type: 'textarea' }]}
+          actionLabel="Reception only"
+        />
+      )
+    ),
     'past-receipts': (
       <PastReceiptsPage
         billing={portalData?.billing}
@@ -1365,6 +1428,9 @@ function AppWorkspace({
         <ProcedureChargePage
           data={procedureChargesData}
           onCreateProcedureCharge={onCreateProcedureCharge}
+          onDeleteProcedureChargeBilling={onDeleteProcedureChargeBilling}
+          onRefreshProcedureCharges={onRefreshProcedureCharges}
+          onUpdateProcedureChargeBilling={onUpdateProcedureChargeBilling}
         />
       ) : role === 'admin' ? (
         <AdminProcedureChargesPage
@@ -1645,6 +1711,20 @@ function AppWorkspace({
         />
       )
     ),
+    'deletion-audit': (
+      role === 'admin' ? (
+        <AdminDeletionAuditPage
+          data={portalData?.activityLog}
+        />
+      ) : (
+        <FormPanel
+          title="Deletion Audit"
+          description="Audit tracking is reserved for admin users."
+          fields={[{ label: 'Note', placeholder: 'Deletion audit is available for admins only.', type: 'textarea' }]}
+          actionLabel="Admin only"
+        />
+      )
+    ),
     messages: (
       <div className="workspace-grid workspace-grid--split">
         <DataTable
@@ -1791,6 +1871,8 @@ export default function App() {
     handleCreateFrontdeskBill,
     handleDeleteBilling,
     handleCreateProcedureCharge,
+    handleUpdateProcedureChargeBilling,
+    handleDeleteProcedureChargeBilling,
     handleCreateMedicalRecord,
     handleUpdateMedicalRecord,
     handleCreatePrescription,
@@ -1834,7 +1916,12 @@ export default function App() {
     handleUpdateProcedureCatalog,
     handleDeleteProcedureCatalog,
     handleCreateBranch,
+    refreshDentistWorkspace,
   } = useDentiplusPortal();
+
+  async function handleRefreshDentistProcedureCharges() {
+    await refreshDentistWorkspace();
+  }
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -1876,9 +1963,11 @@ export default function App() {
       onCreatePrescription={handleCreatePrescription}
       onUpdatePrescription={handleUpdatePrescription}
       onCreateProcedureCharge={handleCreateProcedureCharge}
+      onDeleteProcedureChargeBilling={handleDeleteProcedureChargeBilling}
       onCreateProcedureCatalog={handleCreateProcedureCatalog}
       onUpdateProcedureCatalog={handleUpdateProcedureCatalog}
       onDeleteProcedureCatalog={handleDeleteProcedureCatalog}
+      onRefreshProcedureCharges={handleRefreshDentistProcedureCharges}
       onCompleteAssignment={handleCompleteAssignment}
       onLoadMedicalRecords={handleLoadMedicalRecords}
       onLoadPrescriptions={handleLoadPrescriptions}
@@ -1914,6 +2003,7 @@ export default function App() {
       onLogout={handleLogout}
       onRegisterPatient={handleRegisterPatient}
       onSaveSettings={handleSaveSettings}
+      onUpdateProcedureChargeBilling={handleUpdateProcedureChargeBilling}
       portalData={portalData}
       setCurrentView={setCurrentView}
       setMobileOpen={setMobileOpen}

@@ -1,5 +1,7 @@
 import React from 'react';
+import { DateInputField } from './DateInputField';
 import { PortalIcon } from './PortalIcon';
+import { displayDateToIso, formatDateRangeLabel, isoToDisplayDate, normalizeDateEntry } from '../lib/dateInput';
 
 function clampPage(page, totalPages) {
   if (totalPages <= 0) {
@@ -14,20 +16,27 @@ function normalizeLeadingUppercase(value) {
 }
 
 function normalizeDateOnly(value) {
-  return String(value ?? '').slice(0, 10);
+  const text = String(value ?? '').trim();
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(text)) {
+    return displayDateToIso(text);
+  }
+
+  return text.slice(0, 10);
 }
 
 function inDateRange(value, startDate, endDate) {
   const dateValue = normalizeDateOnly(value);
+  const startValue = normalizeDateOnly(startDate);
+  const endValue = normalizeDateOnly(endDate);
   if (!dateValue) {
     return false;
   }
 
-  if (startDate && dateValue < startDate) {
+  if (startDate && (!startValue || dateValue < startValue)) {
     return false;
   }
 
-  if (endDate && dateValue > endDate) {
+  if (endDate && (!endValue || dateValue > endValue)) {
     return false;
   }
 
@@ -164,7 +173,7 @@ function ExpenseModal({ deleting, feedback, form, isOpen, onChange, onClose, onD
           </label>
           <label className="field-block">
             <span>Expense date</span>
-            <input name="expense_date" onChange={onChange} required type="date" value={form.expense_date} />
+            <DateInputField name="expense_date" onChange={onChange} placeholder="dd/mm/yyyy" required value={form.expense_date} />
           </label>
           <label className="field-block field-block--wide">
             <span>Notes</span>
@@ -206,7 +215,7 @@ export function ReceptionExpensesPage({ data, onCreateExpense, onDeleteExpense, 
   const categories = Array.from(new Set(items.map((item) => item.category).filter(Boolean)));
   const todayKey = new Date().toISOString().slice(0, 10);
   const selectedRangeLabel = startDate || endDate
-    ? `${startDate || 'Beginning'} to ${endDate || 'Today'}`
+    ? formatDateRangeLabel(startDate, endDate)
     : 'All available dates';
   const filteredItems = items.filter((item) => {
     const matchesCategory = categoryFilter === 'all' || item.category === categoryFilter;
@@ -237,7 +246,7 @@ export function ReceptionExpensesPage({ data, onCreateExpense, onDeleteExpense, 
       detail: '',
       category: 'Operations',
       amount: '',
-      expense_date: new Date().toISOString().slice(0, 10),
+      expense_date: isoToDisplayDate(new Date().toISOString().slice(0, 10)),
       notes: '',
     });
     setModalOpen(true);
@@ -250,7 +259,7 @@ export function ReceptionExpensesPage({ data, onCreateExpense, onDeleteExpense, 
       detail: item.detail ?? '',
       category: item.category ?? 'Operations',
       amount: item.amount ?? '',
-      expense_date: item.expenseDate ?? '',
+      expense_date: isoToDisplayDate(item.expenseDate ?? ''),
       notes: item.notes ?? '',
     });
     setModalOpen(true);
@@ -260,7 +269,11 @@ export function ReceptionExpensesPage({ data, onCreateExpense, onDeleteExpense, 
     const { name, value } = event.target;
     setForm((current) => ({
       ...current,
-      [name]: ['amount', 'expense_date', 'category'].includes(name) ? value : normalizeLeadingUppercase(value),
+      [name]: name === 'expense_date'
+        ? normalizeDateEntry(value)
+        : ['amount', 'category'].includes(name)
+          ? value
+          : normalizeLeadingUppercase(value),
     }));
   }
 
@@ -273,10 +286,21 @@ export function ReceptionExpensesPage({ data, onCreateExpense, onDeleteExpense, 
     setSaving(true);
     setFeedback('');
     try {
+      const expenseDate = displayDateToIso(form.expense_date);
+      if (!expenseDate) {
+        throw new Error('Expense date must use the dd/mm/yyyy format.');
+      }
+
       if (form.id) {
-        await onUpdateExpense(form);
+        await onUpdateExpense({
+          ...form,
+          expense_date: expenseDate,
+        });
       } else {
-        await onCreateExpense(form);
+        await onCreateExpense({
+          ...form,
+          expense_date: expenseDate,
+        });
       }
       setModalOpen(false);
       setForm(null);
@@ -422,11 +446,11 @@ export function ReceptionExpensesPage({ data, onCreateExpense, onDeleteExpense, 
           </label>
           <label className="field-block reception-inline-field">
             <span>Start date</span>
-            <input max={endDate || undefined} onChange={(event) => setStartDate(event.target.value)} type="date" value={startDate} />
+            <DateInputField name="start_date" onChange={(event) => setStartDate(normalizeDateEntry(event.target.value))} placeholder="dd/mm/yyyy" value={startDate} />
           </label>
           <label className="field-block reception-inline-field">
             <span>End date</span>
-            <input min={startDate || undefined} onChange={(event) => setEndDate(event.target.value)} type="date" value={endDate} />
+            <DateInputField name="end_date" onChange={(event) => setEndDate(normalizeDateEntry(event.target.value))} placeholder="dd/mm/yyyy" value={endDate} />
           </label>
           <label className="field-block reception-inline-field">
             <span>Rows per page</span>

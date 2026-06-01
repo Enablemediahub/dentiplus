@@ -1,13 +1,45 @@
 import React from 'react';
+import { DateInputField } from './DateInputField';
+import { displayDateToIso, normalizeDateEntry } from '../lib/dateInput';
 
-function normalizeDate(value) {
-  return value || '';
-}
+const WALKIN_VISIT_REASON_OPTIONS = [
+  'Dental Checkup',
+  'Cleaning',
+  'Whitening',
+  'Replacement Of Missing Teeth',
+  'Experiencing Pain',
+  'Mouth Sores or Ulcer',
+  'Others',
+];
+
+const WALKIN_MARITAL_STATUS_OPTIONS = [
+  'Married',
+  'Single',
+  'Separated',
+  'Divorced',
+];
+
+const WALKIN_MEDICAL_HISTORY_OPTIONS = [
+  'Hypertension',
+  'Diabetes',
+  'Stomach Ulcer',
+  'Sickle',
+  'Malignancies',
+  'Covid/ Tested Positive in Last 3 Months',
+  'Others',
+];
+
+const WALKIN_REFERRAL_SOURCE_OPTIONS = [
+  'Social Media',
+  'Passerby',
+  'Referral',
+];
 
 export function AppointmentBookingModal({
   dentists = [],
   isOpen,
   onClose,
+  onSuccess,
   onSubmit,
   initialPatient = null,
   patients = [],
@@ -62,7 +94,10 @@ export function AppointmentBookingModal({
       return;
     }
 
-    setForm((current) => ({ ...current, [name]: value }));
+    setForm((current) => ({
+      ...current,
+      [name]: name === 'appointment_date' ? normalizeDateEntry(value) : value,
+    }));
   }
 
   async function handleSubmit(event) {
@@ -71,16 +106,27 @@ export function AppointmentBookingModal({
     setSaving(true);
 
     try {
-      await onSubmit({
+      const appointmentDate = displayDateToIso(form.appointment_date);
+      const today = new Date().toISOString().slice(0, 10);
+      if (!appointmentDate) {
+        throw new Error('Appointment date must use the dd/mm/yyyy format.');
+      }
+
+      if (appointmentDate < today) {
+        throw new Error('Appointment date cannot be earlier than today.');
+      }
+
+      const response = await onSubmit({
         patient_id: form.patient_id ? Number(form.patient_id) : null,
         patient_name: form.patient_name,
         phone: form.phone,
         dentist_id: Number(form.dentist_id),
-        appointment_date: form.appointment_date,
+        appointment_date: appointmentDate,
         appointment_time: form.appointment_time,
         procedure: form.procedure,
         notes: form.notes,
       });
+      onSuccess?.(response);
       onClose();
     } catch (error) {
       setFeedback(error.message);
@@ -164,12 +210,12 @@ export function AppointmentBookingModal({
 
             <label className="field-block">
               <span>Appointment date</span>
-              <input
-                min={normalizeDate(new Date().toISOString().slice(0, 10))}
+              <DateInputField
+                min={new Date().toISOString().slice(0, 10)}
                 name="appointment_date"
                 onChange={updateField}
+                placeholder="dd/mm/yyyy"
                 required
-                type="date"
                 value={form.appointment_date}
               />
             </label>
@@ -204,7 +250,7 @@ export function AppointmentBookingModal({
   );
 }
 
-export function WalkinRegistrationModal({ isOpen, onClose, onSubmit }) {
+export function WalkinRegistrationModal({ isOpen, onClose, onSuccess, onSubmit }) {
   const [form, setForm] = React.useState({
     first_name: '',
     other_names: '',
@@ -220,9 +266,12 @@ export function WalkinRegistrationModal({ isOpen, onClose, onSubmit }) {
     emergency_contact_name: '',
     emergency_contact_phone: '',
     referral_source: '',
+    referral_source_other: '',
     visit_reason: '',
+    visit_reason_other: '',
     assignment_visit_reason: '',
     medical_history: '',
+    medical_history_other: '',
     current_medications: '',
     allergies: '',
     dental_history: '',
@@ -248,7 +297,18 @@ export function WalkinRegistrationModal({ isOpen, onClose, onSubmit }) {
 
   function updateField(event) {
     const { name, value } = event.target;
-    setForm((current) => ({ ...current, [name]: value }));
+    setForm((current) => ({
+      ...current,
+      ...(name === 'visit_reason' && value !== 'Others'
+        ? {
+            visit_reason_other: '',
+            assignment_visit_reason: current.assignment_visit_reason === current.visit_reason ? value : current.assignment_visit_reason,
+          }
+        : {}),
+      ...(name === 'medical_history' && value !== 'Others' ? { medical_history_other: '' } : {}),
+      ...(name === 'referral_source' && value !== 'Social Media' ? { referral_source_other: '' } : {}),
+      [name]: ['birth_date', 'last_dental_visit'].includes(name) ? normalizeDateEntry(value) : value,
+    }));
   }
 
   async function handleSubmit(event) {
@@ -257,12 +317,46 @@ export function WalkinRegistrationModal({ isOpen, onClose, onSubmit }) {
     setSaving(true);
 
     try {
-      await onSubmit({
+      const birthDate = displayDateToIso(form.birth_date);
+      const lastDentalVisit = displayDateToIso(form.last_dental_visit);
+      const visitReason = form.visit_reason === 'Others'
+        ? form.visit_reason_other.trim()
+        : form.visit_reason.trim();
+      const assignmentVisitReason = form.assignment_visit_reason.trim() || visitReason;
+      const medicalHistory = form.medical_history === 'Others'
+        ? form.medical_history_other.trim()
+        : form.medical_history.trim();
+      const referralSource = form.referral_source === 'Social Media'
+        ? `Social Media - ${form.referral_source_other.trim()}`
+        : form.referral_source.trim();
+      if (!birthDate) {
+        throw new Error('Birth date must use the dd/mm/yyyy format.');
+      }
+
+      if (form.last_dental_visit && !lastDentalVisit) {
+        throw new Error('Last dental visit must use the dd/mm/yyyy format.');
+      }
+
+      if (!visitReason) {
+        throw new Error('Choose a visit reason, or specify it when using Others.');
+      }
+
+      if (form.medical_history === 'Others' && !medicalHistory) {
+        throw new Error('Specify the medical history when using Others.');
+      }
+
+      if (form.referral_source === 'Social Media' && !form.referral_source_other.trim()) {
+        throw new Error('Specify the social media source when Social Media is selected.');
+      }
+
+      const response = await onSubmit({
         ...form,
-        medical_history: form.medical_history
-          .split(',')
-          .map((item) => item.trim())
-          .filter(Boolean),
+        birth_date: birthDate,
+        referral_source: referralSource,
+        visit_reason: visitReason,
+        assignment_visit_reason: assignmentVisitReason,
+        last_dental_visit: form.last_dental_visit ? lastDentalVisit : '',
+        medical_history: medicalHistory ? [medicalHistory] : [],
       });
       setForm({
         first_name: '',
@@ -279,9 +373,12 @@ export function WalkinRegistrationModal({ isOpen, onClose, onSubmit }) {
         emergency_contact_name: '',
         emergency_contact_phone: '',
         referral_source: '',
+        referral_source_other: '',
         visit_reason: '',
+        visit_reason_other: '',
         assignment_visit_reason: '',
         medical_history: '',
+        medical_history_other: '',
         current_medications: '',
         allergies: '',
         dental_history: '',
@@ -292,6 +389,7 @@ export function WalkinRegistrationModal({ isOpen, onClose, onSubmit }) {
         social_media_consent: '',
         old_folder_id: '',
       });
+      onSuccess?.(response);
       onClose();
     } catch (error) {
       setFeedback(error.message);
@@ -354,7 +452,7 @@ export function WalkinRegistrationModal({ isOpen, onClose, onSubmit }) {
               </label>
               <label className="field-block">
                 <span>Birth date</span>
-                <input name="birth_date" onChange={updateField} required type="date" value={form.birth_date} />
+                <DateInputField name="birth_date" onChange={updateField} placeholder="dd/mm/yyyy" required value={form.birth_date} />
               </label>
               <label className="field-block">
                 <span>Old folder ID</span>
@@ -372,19 +470,52 @@ export function WalkinRegistrationModal({ isOpen, onClose, onSubmit }) {
             <div className="form-grid">
               <label className="field-block">
                 <span>Visit reason</span>
-                <input name="visit_reason" onChange={updateField} type="text" value={form.visit_reason} />
+                <select name="visit_reason" onChange={updateField} value={form.visit_reason}>
+                  <option value="">Choose visit reason</option>
+                  {WALKIN_VISIT_REASON_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option === 'Others' ? 'Others and you specify' : option}
+                    </option>
+                  ))}
+                </select>
               </label>
+              {form.visit_reason === 'Others' ? (
+                <label className="field-block">
+                  <span>Specify visit reason</span>
+                  <input name="visit_reason_other" onChange={updateField} type="text" value={form.visit_reason_other} />
+                </label>
+              ) : null}
               <label className="field-block">
                 <span>Assignment visit reason</span>
                 <input name="assignment_visit_reason" onChange={updateField} type="text" value={form.assignment_visit_reason} />
               </label>
               <label className="field-block">
                 <span>Referral source</span>
-                <input name="referral_source" onChange={updateField} type="text" value={form.referral_source} />
+                <select name="referral_source" onChange={updateField} value={form.referral_source}>
+                  <option value="">Choose referral source</option>
+                  {WALKIN_REFERRAL_SOURCE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option === 'Social Media' ? 'Social Media (specify if Instagram, Facebook, Tiktok, X etc)' : option}
+                    </option>
+                  ))}
+                </select>
               </label>
+              {form.referral_source === 'Social Media' ? (
+                <label className="field-block">
+                  <span>Specify social media source</span>
+                  <input name="referral_source_other" onChange={updateField} type="text" value={form.referral_source_other} />
+                </label>
+              ) : null}
               <label className="field-block">
                 <span>Marital status</span>
-                <input name="marital_status" onChange={updateField} type="text" value={form.marital_status} />
+                <select name="marital_status" onChange={updateField} value={form.marital_status}>
+                  <option value="">Choose marital status</option>
+                  {WALKIN_MARITAL_STATUS_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className="field-block">
                 <span>Occupation</span>
@@ -410,14 +541,26 @@ export function WalkinRegistrationModal({ isOpen, onClose, onSubmit }) {
             <div className="form-grid">
               <label className="field-block field-block--wide">
                 <span>Medical history</span>
-                <textarea
-                  name="medical_history"
-                  onChange={updateField}
-                  placeholder="Comma-separated if you want multiple items"
-                  rows={3}
-                  value={form.medical_history}
-                />
+                <select name="medical_history" onChange={updateField} value={form.medical_history}>
+                  <option value="">Choose medical history if applicable</option>
+                  {WALKIN_MEDICAL_HISTORY_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option === 'Others' ? 'Others and you specify' : option}
+                    </option>
+                  ))}
+                </select>
               </label>
+              {form.medical_history === 'Others' ? (
+                <label className="field-block field-block--wide">
+                  <span>Specify medical history</span>
+                  <textarea
+                    name="medical_history_other"
+                    onChange={updateField}
+                    rows={3}
+                    value={form.medical_history_other}
+                  />
+                </label>
+              ) : null}
               <label className="field-block field-block--wide">
                 <span>Current medications</span>
                 <textarea name="current_medications" onChange={updateField} rows={3} value={form.current_medications} />
@@ -432,11 +575,17 @@ export function WalkinRegistrationModal({ isOpen, onClose, onSubmit }) {
               </label>
               <label className="field-block">
                 <span>Last dental visit</span>
-                <input name="last_dental_visit" onChange={updateField} type="date" value={form.last_dental_visit} />
+                <DateInputField name="last_dental_visit" onChange={updateField} placeholder="dd/mm/yyyy" value={form.last_dental_visit} />
               </label>
               <label className="field-block">
                 <span>Alcohol use</span>
-                <input name="alcohol_use" onChange={updateField} type="text" value={form.alcohol_use} />
+                <select name="alcohol_use" onChange={updateField} value={form.alcohol_use}>
+                  <option value="">Choose alcohol use</option>
+                  <option value="Casual">Casual</option>
+                  <option value="Occasional">Occasional</option>
+                  <option value="None">None</option>
+                  <option value="Regular">Regular</option>
+                </select>
               </label>
               <label className="field-block">
                 <span>Smoking</span>

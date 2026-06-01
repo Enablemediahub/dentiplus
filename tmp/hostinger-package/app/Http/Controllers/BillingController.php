@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Support\Auth;
 use App\Support\Database;
 use App\Support\Request;
 use App\Support\Response;
@@ -40,6 +41,7 @@ final class BillingController extends Controller
         $pdo = Database::connection();
 
         $this->ensureSchema($pdo);
+        (new ActivityLogController())->ensureSchema($pdo);
 
         if (!in_array($role, ['receptionist', 'admin'], true)) {
             Response::json(['message' => 'Only reception or admin can create consultation and registration bills.'], 403);
@@ -483,6 +485,8 @@ final class BillingController extends Controller
         $pdo->beginTransaction();
 
         try {
+            $this->logBillingDeletion($pdo, $user, $billing);
+
             if ($insuranceCount > 0) {
                 $insuranceDelete = $pdo->prepare('DELETE FROM health_insurance WHERE billing_id = :billing_id');
                 $insuranceDelete->execute(['billing_id' => $billingId]);
@@ -853,10 +857,7 @@ final class BillingController extends Controller
             ])));
         }
 
-        $billType = trim((string) ($row['bill_type'] ?? ''));
-        if ($billType === '') {
-            $billType = !empty($row['procedures_data']) ? 'procedure_charge' : 'procedure_charge';
-        }
+        $billType = $this->resolvedBillType($row);
 
         $procedureSummary = $this->procedureSummary($pdo, $row);
         $chargeSummary = $billType === 'frontdesk_fees'
@@ -902,7 +903,53 @@ final class BillingController extends Controller
             $parts[] = 'Consultation fee';
         }
 
-        return $parts !== [] ? implode(' + ', $parts) : 'Frontdesk fees';
+        if ($parts !== []) {
+            return implode(' + ', $parts);
+        }
+
+        $notes = strtolower(trim((string) ($row['notes'] ?? '')));
+        $noteParts = [];
+        if (str_contains($notes, 'registration fee')) {
+            $noteParts[] = 'Registration fee';
+        }
+        if (str_contains($notes, 'consultation fee')) {
+            $noteParts[] = 'Consultation fee';
+        }
+
+        return $noteParts !== [] ? implode(' + ', array_unique($noteParts)) : 'Consultation / Registration';
+    }
+
+    private function resolvedBillType(array $row): string
+    {
+        $billType = trim((string) ($row['bill_type'] ?? ''));
+        if ($billType === 'frontdesk_fees' || $billType === 'procedure_charge') {
+            if ($billType === 'procedure_charge' && $this->looksLikeLegacyFrontdeskBill($row)) {
+                return 'frontdesk_fees';
+            }
+
+            return $billType;
+        }
+
+        return $this->looksLikeLegacyFrontdeskBill($row) ? 'frontdesk_fees' : 'procedure_charge';
+    }
+
+    private function looksLikeLegacyFrontdeskBill(array $row): bool
+    {
+        $hasFrontdeskFees = (float) ($row['registration_fee'] ?? 0) > 0 || (float) ($row['consultation_fee'] ?? 0) > 0;
+        if ($hasFrontdeskFees) {
+            return true;
+        }
+
+        $notes = strtolower(trim((string) ($row['notes'] ?? '')));
+        if (str_contains($notes, 'registration fee') || str_contains($notes, 'consultation fee')) {
+            return true;
+        }
+
+        $dentistName = strtolower(trim((string) ($row['dentist_name'] ?? '')));
+        $procedureId = (int) ($row['procedure_id'] ?? 0);
+        $proceduresData = $this->decodeProceduresData($row['procedures_data'] ?? null);
+
+        return in_array($dentistName, ['', 'reception desk'], true) && $procedureId <= 0 && $proceduresData === [];
     }
 
     private function procedureSummary(PDO $pdo, array $row): string
@@ -1048,6 +1095,74 @@ final class BillingController extends Controller
         }
 
         return 'Dr. (Dent) ' . $trimmed;
+    }
+
+    private function logBillingDeletion(PDO $pdo, array $user, array $billing): void
+    {
+        $actorRole = $this->normalizedRole($user);
+        $actorName = Auth::staffDisplayName($user, $actorRole !== '' ? $actorRole : 'staff');
+        $billType = (string) ($billing['bill_type'] ?? '');
+        $summary = $billType === 'frontdesk_fees'
+            ? $this->frontdeskChargeSummary($billing)
+            : $this->procedureSummary($pdo, $billing);
+
+        $payload = [
+            'bill_type' => (string) ($billing['bill_type'] ?? ''),
+            'patient_id' => isset($billing['patient_id']) ? (int) $billing['patient_id'] : null,
+            'patient_name' => (string) ($billing['patient_name'] ?? ''),
+            'amount' => round((float) ($billing['amount'] ?? 0), 2),
+            'remaining_amount' => round((float) ($billing['remaining_amount'] ?? 0), 2),
+            'branch' => (string) ($billing['branch'] ?? ''),
+            'notes' => (string) ($billing['notes'] ?? ''),
+            'procedures_data' => $this->decodeProceduresData($billing['procedures_data'] ?? null),
+        ];
+
+        $statement = $pdo->prepare(
+            'INSERT INTO activity_log (
+                action_type,
+                entity_type,
+                entity_id,
+                actor_staff_id,
+                actor_name,
+                actor_role,
+                branch,
+                patient_name,
+                reference,
+                amount,
+                summary,
+                payload,
+                created_at
+            ) VALUES (
+                :action_type,
+                :entity_type,
+                :entity_id,
+                :actor_staff_id,
+                :actor_name,
+                :actor_role,
+                :branch,
+                :patient_name,
+                :reference,
+                :amount,
+                :summary,
+                :payload,
+                :created_at
+            )'
+        );
+        $statement->execute([
+            'action_type' => 'delete',
+            'entity_type' => 'billing_record',
+            'entity_id' => isset($billing['id']) ? (int) $billing['id'] : null,
+            'actor_staff_id' => isset($user['staff_id']) ? (int) $user['staff_id'] : null,
+            'actor_name' => $actorName,
+            'actor_role' => $actorRole,
+            'branch' => (string) ($billing['branch'] ?? $user['branch'] ?? ''),
+            'patient_name' => (string) ($billing['patient_name'] ?? ''),
+            'reference' => sprintf('INV-%05d', (int) ($billing['id'] ?? 0)),
+            'amount' => round((float) ($billing['amount'] ?? 0), 2),
+            'summary' => $summary,
+            'payload' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'created_at' => date('Y-m-d H:i:s'),
+        ]);
     }
 
     private function ensureSchema(PDO $pdo): void

@@ -219,8 +219,9 @@ final class ExpensesController extends Controller
         $expenseDateAdded = $this->ensureColumn($pdo, 'expenses', 'expense_date', 'ALTER TABLE expenses ADD COLUMN expense_date DATE NULL AFTER amount');
         $notesAdded = $this->ensureColumn($pdo, 'expenses', 'notes', 'ALTER TABLE expenses ADD COLUMN notes TEXT NULL AFTER expense_date');
         $branchAdded = $this->ensureColumn($pdo, 'expenses', 'branch', 'ALTER TABLE expenses ADD COLUMN branch VARCHAR(100) NULL AFTER receptionist_id');
+        $updatedAtAdded = $this->ensureColumn($pdo, 'expenses', 'updated_at', 'ALTER TABLE expenses ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at');
 
-        if ($detailAdded || $categoryAdded || $descriptionAdded || $expenseDateAdded || $notesAdded || $branchAdded) {
+        if ($detailAdded || $categoryAdded || $descriptionAdded || $expenseDateAdded || $notesAdded || $branchAdded || $updatedAtAdded) {
             $pdo->exec("UPDATE expenses SET expense_date = DATE(created_at) WHERE expense_date IS NULL");
             $pdo->exec("UPDATE expenses SET detail = CASE
                 WHEN detail IS NULL OR detail = '' OR (detail = 'Operational expense' AND COALESCE(description, '') <> '')
@@ -228,6 +229,7 @@ final class ExpensesController extends Controller
                 ELSE detail
             END");
             $pdo->exec("UPDATE expenses SET description = COALESCE(NULLIF(description, ''), detail)");
+            $pdo->exec("UPDATE expenses SET updated_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP)");
         }
     }
 

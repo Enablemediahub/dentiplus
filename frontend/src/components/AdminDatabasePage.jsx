@@ -141,12 +141,27 @@ function RowModal({
                 <label className={`field-block ${column.editable ? '' : 'field-block--readonly'}`} key={column.name}>
                   <span>{column.label}</span>
                   {column.editable ? (
-                    <input
-                      name={column.name}
-                      onChange={onChange}
-                      type="text"
-                      value={record[column.name] ?? ''}
-                    />
+                    Array.isArray(column.options) && column.options.length > 0 ? (
+                      <select
+                        name={column.name}
+                        onChange={onChange}
+                        value={record[column.name] ?? ''}
+                      >
+                        {column.nullable ? <option value="">Select {column.label}</option> : null}
+                        {column.options.map((option) => (
+                          <option key={`${column.name}-${option.value}`} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        name={column.name}
+                        onChange={onChange}
+                        type="text"
+                        value={record[column.name] ?? ''}
+                      />
+                    )
                   ) : (
                     <div className="database-readonly-value">{formatValue(record[column.name])}</div>
                   )}

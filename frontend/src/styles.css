@@ -64,6 +64,58 @@ select {
   font: inherit;
 }
 
+.date-input-field {
+  position: relative;
+  display: block;
+}
+
+.date-input-field__text {
+  width: 100%;
+  padding-right: 3.35rem;
+}
+
+.date-input-field__button {
+  position: absolute;
+  top: 50%;
+  right: 0.75rem;
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  transform: translateY(-50%);
+}
+
+.date-input-field__button:hover:not(:disabled),
+.date-input-field__button:focus-visible {
+  color: var(--text-primary);
+  background: var(--surface-soft);
+  outline: none;
+}
+
+.date-input-field__button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.date-input-field__icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.date-input-field__native-picker {
+  position: absolute;
+  inset: auto;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
 button {
   cursor: pointer;
 }
@@ -2738,6 +2790,64 @@ button {
   gap: 10px;
 }
 
+.procedure-charge-actions {
+  align-items: center;
+}
+
+.procedure-charge-total {
+  margin-left: auto;
+  text-align: right;
+}
+
+.procedure-charge-total__label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.procedure-charge-total__value {
+  display: block;
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.05;
+}
+
+.payment-processing-actions {
+  align-items: center;
+}
+
+.payment-processing-total {
+  margin-left: auto;
+  text-align: right;
+}
+
+.payment-processing-total__label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.payment-processing-total__label--secondary {
+  margin-top: 10px;
+}
+
+.payment-processing-total__value {
+  display: block;
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.05;
+}
+
+.payment-processing-total__value--secondary {
+  font-size: 1.4rem;
+}
+
 .danger-button {
   display: inline-flex;
   align-items: center;
@@ -2977,6 +3087,16 @@ button {
   .workspace-card__actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .procedure-charge-total {
+    margin-left: 0;
+    text-align: center;
+  }
+
+  .payment-processing-total {
+    margin-left: 0;
+    text-align: center;
   }
 
   .workspace-card__actions .primary-button,

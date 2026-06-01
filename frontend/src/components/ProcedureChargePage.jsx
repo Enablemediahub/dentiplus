@@ -29,7 +29,7 @@ function formatCurrency(value) {
   })}`;
 }
 
-function matchesSearch(item, query) {
+function matchesQueueSearch(item, query) {
   const trimmed = query.trim().toLowerCase();
   if (!trimmed) {
     return true;
@@ -47,6 +47,26 @@ function matchesSearch(item, query) {
     .includes(trimmed);
 }
 
+function matchesPendingSearch(item, query) {
+  const trimmed = query.trim().toLowerCase();
+  if (!trimmed) {
+    return true;
+  }
+
+  return [
+    item.patientName,
+    item.procedureSummary,
+    item.amountLabel,
+    item.remainingAmountLabel,
+    item.status,
+    item.notes,
+    item.dateLabel,
+  ]
+    .join(' ')
+    .toLowerCase()
+    .includes(trimmed);
+}
+
 function clampPage(page, totalPages) {
   if (totalPages <= 0) {
     return 1;
@@ -55,9 +75,31 @@ function clampPage(page, totalPages) {
   return Math.min(Math.max(page, 1), totalPages);
 }
 
-function ChargeProcedureModal({ isOpen, onClose, onSubmit, patient, procedures }) {
-  const [rows, setRows] = React.useState([{ procedure_id: '', amount: '', topup_notes: '' }]);
-  const [notes, setNotes] = React.useState('');
+function normalizeProcedureRows(rows = []) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return [{ procedure_id: '', amount: '', topup_notes: '' }];
+  }
+
+  return rows.map((row) => ({
+    procedure_id: row?.procedure_id ? String(row.procedure_id) : '',
+    amount: row?.amount ? String(row.amount) : '',
+    topup_notes: row?.topup_notes ?? '',
+  }));
+}
+
+function ProcedureBillingModal({
+  bill,
+  isOpen,
+  onClose,
+  onSuccess,
+  onSubmit,
+  patient,
+  procedures,
+}) {
+  const isEditMode = Boolean(bill);
+  const sourceRows = bill?.proceduresData ?? [];
+  const [rows, setRows] = React.useState(normalizeProcedureRows(sourceRows));
+  const [notes, setNotes] = React.useState(bill?.notes ?? '');
   const [saving, setSaving] = React.useState(false);
   const [feedback, setFeedback] = React.useState('');
 
@@ -66,14 +108,19 @@ function ChargeProcedureModal({ isOpen, onClose, onSubmit, patient, procedures }
       return;
     }
 
-    setRows([{ procedure_id: '', amount: '', topup_notes: '' }]);
-    setNotes('');
+    setRows(normalizeProcedureRows(bill?.proceduresData ?? []));
+    setNotes(bill?.notes ?? '');
     setFeedback('');
-  }, [isOpen, patient]);
+  }, [bill, isEditMode, isOpen, patient]);
 
-  if (!isOpen || !patient) {
+  if (!isOpen) {
     return null;
   }
+
+  const subjectName = isEditMode ? bill?.patientName : patient?.patientName;
+  const subjectFolderId = patient?.folderId ?? '';
+  const subjectPhone = patient?.phone ?? '';
+  const subjectReason = patient?.visitReason ?? '';
 
   function updateRow(index, field, value) {
     setRows((current) => current.map((row, rowIndex) => (
@@ -97,16 +144,26 @@ function ChargeProcedureModal({ isOpen, onClose, onSubmit, patient, procedures }
     setFeedback('');
 
     try {
-      await onSubmit({
-        patient_id: patient.patientId,
-        assignment_id: patient.assignmentId,
+      const payload = {
         notes,
         procedures: rows.map((row) => ({
           procedure_id: Number(row.procedure_id),
           amount: Number(row.amount),
           topup_notes: row.topup_notes,
         })),
-      });
+      };
+
+      const response = await onSubmit(isEditMode
+        ? {
+            ...payload,
+            billing_id: bill.billingId,
+          }
+        : {
+            ...payload,
+            patient_id: patient.patientId,
+            assignment_id: patient.assignmentId,
+          });
+      onSuccess?.(response);
       onClose();
     } catch (error) {
       setFeedback(error.message);
@@ -121,11 +178,12 @@ function ChargeProcedureModal({ isOpen, onClose, onSubmit, patient, procedures }
         <div className="workspace-modal__header">
           <div className="workspace-patient-summary">
             <p className="eyebrow eyebrow--modal">Procedure charges</p>
-            <h3>Charge {patient.patientName}</h3>
+            <h3>{isEditMode ? `Edit billing for ${subjectName}` : `Charge ${subjectName}`}</h3>
             <div className="workspace-patient-meta">
-              <span>{patient.folderId}</span>
-              <span>{formatPhoneNumber(patient.phone)}</span>
-              <span>{patient.visitReason}</span>
+              {subjectFolderId ? <span>{subjectFolderId}</span> : null}
+              {subjectPhone ? <span>{formatPhoneNumber(subjectPhone)}</span> : null}
+              {subjectReason ? <span>{subjectReason}</span> : null}
+              {isEditMode ? <span>{bill.status}</span> : null}
               <span>Total {formatCurrency(totalCharge)}</span>
             </div>
           </div>
@@ -211,11 +269,15 @@ function ChargeProcedureModal({ isOpen, onClose, onSubmit, patient, procedures }
 
           {feedback ? <p className="form-error">{feedback}</p> : null}
 
-          <div className="workspace-card__actions">
+          <div className="workspace-card__actions workspace-card__actions--between procedure-charge-actions">
             <button className="primary-button" disabled={saving} type="submit">
               <PortalIcon className="workspace-submit-icon" name="receipt" />
-              <span>{saving ? 'Submitting charges...' : 'Submit to payment desk'}</span>
+              <span>{saving ? (isEditMode ? 'Updating bill...' : 'Submitting charges...') : (isEditMode ? 'Update bill' : 'Submit to payment desk')}</span>
             </button>
+            <div className="procedure-charge-total" aria-live="polite">
+              <span className="procedure-charge-total__label">Total price</span>
+              <strong className="procedure-charge-total__value">{formatCurrency(totalCharge)}</strong>
+            </div>
           </div>
         </form>
       </div>
@@ -223,20 +285,39 @@ function ChargeProcedureModal({ isOpen, onClose, onSubmit, patient, procedures }
   );
 }
 
-export function ProcedureChargePage({ data, onCreateProcedureCharge }) {
+export function ProcedureChargePage({
+  data,
+  onCreateProcedureCharge,
+  onDeleteProcedureChargeBilling,
+  onRefreshProcedureCharges,
+  onUpdateProcedureChargeBilling,
+}) {
   const [search, setSearch] = React.useState('');
+  const [pendingSearch, setPendingSearch] = React.useState('');
+  const [successMessage, setSuccessMessage] = React.useState('');
   const [rowsPerPage, setRowsPerPage] = React.useState(15);
   const [page, setPage] = React.useState(1);
-  const [isModalOpen, setIsModalOpen] = React.useState(false);
+  const [pendingRowsPerPage, setPendingRowsPerPage] = React.useState(10);
+  const [pendingPage, setPendingPage] = React.useState(1);
+  const [isCreateModalOpen, setIsCreateModalOpen] = React.useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = React.useState(false);
   const [selectedPatient, setSelectedPatient] = React.useState(null);
+  const [selectedPendingBill, setSelectedPendingBill] = React.useState(null);
+  const [deletingBillingId, setDeletingBillingId] = React.useState(null);
+  const [refreshing, setRefreshing] = React.useState(false);
+  const successMessageRef = React.useRef(null);
 
   const queueItems = data?.queueItems ?? [];
   const procedures = data?.procedures ?? [];
   const pendingItems = data?.pendingItems ?? [];
-  const filteredQueueItems = queueItems.filter((item) => matchesSearch(item, search));
+  const filteredQueueItems = queueItems.filter((item) => matchesQueueSearch(item, search));
+  const filteredPendingItems = pendingItems.filter((item) => matchesPendingSearch(item, pendingSearch));
   const totalPages = Math.max(1, Math.ceil(filteredQueueItems.length / rowsPerPage));
   const currentPage = clampPage(page, totalPages);
+  const pendingTotalPages = Math.max(1, Math.ceil(filteredPendingItems.length / pendingRowsPerPage));
+  const currentPendingPage = clampPage(pendingPage, pendingTotalPages);
   const paginatedQueue = filteredQueueItems.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+  const paginatedPendingItems = filteredPendingItems.slice((currentPendingPage - 1) * pendingRowsPerPage, currentPendingPage * pendingRowsPerPage);
   const averageProcedureCharge = procedures.length
     ? procedures.reduce((sum, item) => sum + Number(item.charge ?? 0), 0) / procedures.length
     : 0;
@@ -246,8 +327,59 @@ export function ProcedureChargePage({ data, onCreateProcedureCharge }) {
   }, [search, rowsPerPage]);
 
   React.useEffect(() => {
+    setPendingPage(1);
+  }, [pendingSearch, pendingRowsPerPage]);
+
+  React.useEffect(() => {
     setPage((current) => clampPage(current, totalPages));
   }, [totalPages]);
+
+  React.useEffect(() => {
+    setPendingPage((current) => clampPage(current, pendingTotalPages));
+  }, [pendingTotalPages]);
+
+  React.useEffect(() => {
+    if (!successMessage || !successMessageRef.current) {
+      return;
+    }
+
+    successMessageRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [successMessage]);
+
+  async function handleRefresh() {
+    if (!onRefreshProcedureCharges) {
+      return;
+    }
+
+    setRefreshing(true);
+    try {
+      await onRefreshProcedureCharges();
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  function handleProcedureChargeSuccess(response) {
+    setSuccessMessage(response?.message ?? 'Procedure charges submitted to the payment desk successfully.');
+  }
+
+  async function handleDeletePendingBill(item) {
+    const confirmed = window.confirm(`Delete ${item.billingId ? `INV-${String(item.billingId).padStart(5, '0')}` : 'this procedure bill'} for ${item.patientName}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingBillingId(item.billingId);
+    try {
+      const response = await onDeleteProcedureChargeBilling({ billing_id: item.billingId });
+      setSuccessMessage(response?.message ?? 'Procedure-charge bill deleted successfully.');
+      if (selectedPendingBill?.billingId === item.billingId) {
+        setSelectedPendingBill(null);
+      }
+    } finally {
+      setDeletingBillingId(null);
+    }
+  }
 
   return (
     <>
@@ -256,8 +388,11 @@ export function ProcedureChargePage({ data, onCreateProcedureCharge }) {
           <div>
             <p className="eyebrow">Procedure charges and billing</p>
             <h3>Dentist billing handoff</h3>
-            <p>Build one grouped charge package per patient, validate amounts against approved ranges, and push the bill to reception for payment and thermal receipt printing.</p>
+            <p>Build one grouped charge package per patient, track unpaid procedure bills, and keep your pending handoff list clean while reception records payments.</p>
           </div>
+          <button className="ghost-button secondary-action--compact workspace-inline-action" disabled={refreshing} onClick={handleRefresh} type="button">
+            <span>{refreshing ? 'Refreshing...' : 'Refresh billing'}</span>
+          </button>
         </div>
 
         <div className="reception-filter-strip">
@@ -272,11 +407,29 @@ export function ProcedureChargePage({ data, onCreateProcedureCharge }) {
             />
           </label>
           <label className="field-block reception-inline-field">
-            <span>Rows per page</span>
+            <span>Queue rows</span>
             <select value={rowsPerPage} onChange={(event) => setRowsPerPage(Number(event.target.value))}>
               <option value={15}>15</option>
               <option value={30}>30</option>
               <option value={45}>45</option>
+            </select>
+          </label>
+          <label className="field-block reception-inline-field reception-search-field">
+            <span>Search pending bills</span>
+            <PortalIcon className="reception-search-icon" name="search" />
+            <input
+              onChange={(event) => setPendingSearch(event.target.value)}
+              placeholder="Patient, procedure, amount, status..."
+              type="text"
+              value={pendingSearch}
+            />
+          </label>
+          <label className="field-block reception-inline-field">
+            <span>Pending rows</span>
+            <select value={pendingRowsPerPage} onChange={(event) => setPendingRowsPerPage(Number(event.target.value))}>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={30}>30</option>
             </select>
           </label>
         </div>
@@ -295,12 +448,12 @@ export function ProcedureChargePage({ data, onCreateProcedureCharge }) {
           <div className="frontdesk-highlight">
             <span>Pending handoffs</span>
             <strong>{pendingItems.length}</strong>
-            <p>Submitted grouped charge packages still waiting at the payment desk.</p>
+            <p>Procedure bills still open at the payment desk. Fully paid bills drop off after refresh.</p>
           </div>
           <div className="frontdesk-highlight">
             <span>Average default charge</span>
             <strong>{formatCurrency(averageProcedureCharge)}</strong>
-            <p>A quick benchmark from the live procedure catalog while you prepare today’s charges.</p>
+            <p>A quick benchmark from the live procedure catalog while you prepare today&apos;s charges.</p>
           </div>
         </div>
       </section>
@@ -315,6 +468,11 @@ export function ProcedureChargePage({ data, onCreateProcedureCharge }) {
             {filteredQueueItems.length} results | Page {currentPage} of {totalPages}
           </span>
         </div>
+        {successMessage ? (
+          <p className="form-success" ref={successMessageRef}>
+            {successMessage}
+          </p>
+        ) : null}
         <div className="table-wrap">
           <table className="data-table">
             <thead>
@@ -341,7 +499,7 @@ export function ProcedureChargePage({ data, onCreateProcedureCharge }) {
                       className="clinical-workspace-button secondary-action--compact"
                       onClick={() => {
                         setSelectedPatient(item);
-                        setIsModalOpen(true);
+                        setIsCreateModalOpen(true);
                       }}
                       type="button"
                     >
@@ -374,11 +532,113 @@ export function ProcedureChargePage({ data, onCreateProcedureCharge }) {
         </div>
       </section>
 
-      <ChargeProcedureModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+      <section className="module-card">
+        <div className="panel-heading workspace-card__header">
+          <div>
+            <p className="eyebrow">Pending billing</p>
+            <h3>Open procedure bills</h3>
+            <p>Unpaid procedure bills remain editable here until payment activity starts at reception.</p>
+          </div>
+          <span className="table-counter">
+            {filteredPendingItems.length} results | Page {currentPendingPage} of {pendingTotalPages}
+          </span>
+        </div>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Bill</th>
+                <th>Patient</th>
+                <th>Procedure</th>
+                <th>Total</th>
+                <th>Balance</th>
+                <th>Status</th>
+                <th>Date</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedPendingItems.length ? paginatedPendingItems.map((item) => (
+                <tr key={`pending-procedure-bill-${item.billingId}`}>
+                  <td>
+                    <strong>{`INV-${String(item.billingId).padStart(5, '0')}`}</strong>
+                  </td>
+                  <td>
+                    <strong>{item.patientName}</strong>
+                    {item.notes ? <span className="table-subcopy">{item.notes}</span> : null}
+                  </td>
+                  <td>{item.procedureSummary}</td>
+                  <td>{item.amountLabel}</td>
+                  <td>{item.remainingAmountLabel}</td>
+                  <td>
+                    <strong>{item.status}</strong>
+                    {!item.canEdit ? <span className="table-subcopy">Locked after payment starts</span> : null}
+                  </td>
+                  <td>{item.dateLabel}</td>
+                  <td>
+                    <div className="reception-action-row">
+                      <button
+                        className="clinical-workspace-button secondary-action--compact"
+                        disabled={!item.canEdit}
+                        onClick={() => {
+                          setSelectedPendingBill(item);
+                          setIsEditModalOpen(true);
+                        }}
+                        type="button"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="ghost-button secondary-action--compact workspace-inline-action destructive-button"
+                        disabled={!item.canDelete || deletingBillingId === item.billingId}
+                        onClick={() => handleDeletePendingBill(item)}
+                        type="button"
+                      >
+                        <span>{deletingBillingId === item.billingId ? 'Deleting...' : 'Delete'}</span>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan="8">No pending procedure bills are waiting at the payment desk.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="table-pagination">
+          <span className="table-counter">
+            Showing {paginatedPendingItems.length ? (currentPendingPage - 1) * pendingRowsPerPage + 1 : 0}
+            {' - '}
+            {Math.min(currentPendingPage * pendingRowsPerPage, filteredPendingItems.length)} of {filteredPendingItems.length}
+          </span>
+          <div className="reception-action-row">
+            <button className="ghost-button secondary-action--compact" disabled={currentPendingPage <= 1} onClick={() => setPendingPage((value) => Math.max(1, value - 1))} type="button">
+              Previous
+            </button>
+            <button className="ghost-button secondary-action--compact" disabled={currentPendingPage >= pendingTotalPages} onClick={() => setPendingPage((value) => Math.min(pendingTotalPages, value + 1))} type="button">
+              Next
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <ProcedureBillingModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={handleProcedureChargeSuccess}
         onSubmit={onCreateProcedureCharge}
         patient={selectedPatient}
+        procedures={procedures}
+      />
+
+      <ProcedureBillingModal
+        bill={selectedPendingBill}
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        onSuccess={(response) => setSuccessMessage(response?.message ?? 'Procedure-charge bill updated successfully.')}
+        onSubmit={onUpdateProcedureChargeBilling}
         procedures={procedures}
       />
     </>

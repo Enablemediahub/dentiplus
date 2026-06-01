@@ -61,14 +61,120 @@ function nowDateTimeLocalValue() {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
 }
 
-function emptyPrescriptionEntry() {
+const CUSTOM_PRESCRIPTION_VALUE = '__other__';
+
+const COMMON_DENTAL_MEDICATIONS = [
+  'Amoxicillin 500mg capsule',
+  'Amoxicillin-clavulanate 625mg tablet',
+  'Metronidazole 400mg tablet',
+  'Ciprofloxacin 500mg tablet',
+  'Azithromycin 500mg tablet',
+  'Doxycycline 100mg capsule',
+  'Flucloxacillin 500mg capsule',
+  'Ibuprofen 400mg tablet',
+  'Diclofenac 50mg tablet',
+  'Paracetamol 500mg tablet',
+  'Paracetamol + Codeine tablet',
+  'Celecoxib 200mg capsule',
+  'Chlorhexidine mouthwash 0.2%',
+  'Nystatin oral suspension',
+  'Miconazole oral gel',
+];
+
+const STANDARD_DOSAGE_OPTIONS = [
+  '200mg',
+  '400mg',
+  '500mg',
+  '625mg',
+  '1g',
+  '5ml',
+  '10ml',
+  '15ml',
+  '1 tablet',
+  '2 tablets',
+  '1 capsule',
+  '2 capsules',
+  '10ml rinse',
+  'Apply thin film',
+];
+
+const STANDARD_FREQUENCY_OPTIONS = [
+  'Once daily',
+  'Twice daily',
+  'Three times daily',
+  'Four times daily',
+  'Every 6 hours',
+  'Every 8 hours',
+  'Every 12 hours',
+  'At night',
+  'After meals',
+  'Before meals',
+  'As needed for pain',
+  'Morning and night',
+  'Rinse twice daily',
+  'Apply three times daily',
+];
+
+const STANDARD_DURATION_OPTIONS = [
+  '1 day',
+  '3 days',
+  '5 days',
+  '7 days',
+  '10 days',
+  '14 days',
+  '21 days',
+  'Until finished',
+  'As needed for 3 days',
+  'As needed for 5 days',
+];
+
+const EMPTY_CLINICAL_SUGGESTIONS = {
+  prescription: {
+    medication: [],
+    dosage: [],
+    frequency: [],
+    duration: [],
+  },
+};
+
+function uniqueTextList(values = []) {
+  const seen = new Set();
+
+  return values.filter((value) => {
+    const trimmed = String(value ?? '').trim();
+    if (!trimmed) {
+      return false;
+    }
+
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  }).map((value) => String(value).trim());
+}
+
+function mergeSuggestionPayload(current = EMPTY_CLINICAL_SUGGESTIONS, incoming = {}) {
+  const nextPrescription = incoming?.prescription ?? {};
+
   return {
-    medication: '',
-    dosage: '',
-    frequency: '',
-    duration: '',
-    instructions: '',
+    prescription: {
+      medication: uniqueTextList([...(current?.prescription?.medication ?? []), ...(nextPrescription.medication ?? [])]),
+      dosage: uniqueTextList([...(current?.prescription?.dosage ?? []), ...(nextPrescription.dosage ?? [])]),
+      frequency: uniqueTextList([...(current?.prescription?.frequency ?? []), ...(nextPrescription.frequency ?? [])]),
+      duration: uniqueTextList([...(current?.prescription?.duration ?? []), ...(nextPrescription.duration ?? [])]),
+    },
   };
+}
+
+function mergeOptionLists(defaultOptions, learnedOptions) {
+  return uniqueTextList([...defaultOptions, ...(learnedOptions ?? [])]);
+}
+
+function emptyPrescriptionEntry() {
+  return prescriptionEntryFromValues();
 }
 
 function normalizeLeadingUppercase(value) {
@@ -90,6 +196,63 @@ function toDateTimeLocalValue(value) {
   }
 
   return `${text}T00:00`;
+}
+
+function matchesOption(options, value) {
+  return options.includes(String(value ?? '').trim());
+}
+
+function isCustomPrescriptionValue(options, value) {
+  const text = String(value ?? '').trim();
+  return text !== '' && !matchesOption(options, text);
+}
+
+function selectedPrescriptionOption(options, value) {
+  return matchesOption(options, value) ? value : '';
+}
+
+function buildPrescriptionOptionSets(clinicalSuggestions = EMPTY_CLINICAL_SUGGESTIONS) {
+  return {
+    medication: mergeOptionLists(COMMON_DENTAL_MEDICATIONS, clinicalSuggestions?.prescription?.medication),
+    dosage: mergeOptionLists(STANDARD_DOSAGE_OPTIONS, clinicalSuggestions?.prescription?.dosage),
+    frequency: mergeOptionLists(STANDARD_FREQUENCY_OPTIONS, clinicalSuggestions?.prescription?.frequency),
+    duration: mergeOptionLists(STANDARD_DURATION_OPTIONS, clinicalSuggestions?.prescription?.duration),
+  };
+}
+
+function prescriptionEntryFromValues(values = {}, optionSets = buildPrescriptionOptionSets()) {
+  const medication = String(values.medication ?? '').trim();
+  const dosage = String(values.dosage ?? '').trim();
+  const frequency = String(values.frequency ?? '').trim();
+  const duration = String(values.duration ?? '').trim();
+
+  return {
+    medication,
+    dosage,
+    frequency,
+    duration,
+    instructions: String(values.instructions ?? ''),
+    medication_option: medication === ''
+      ? ''
+      : (isCustomPrescriptionValue(optionSets.medication, medication)
+        ? CUSTOM_PRESCRIPTION_VALUE
+        : selectedPrescriptionOption(optionSets.medication, medication)),
+    dosage_option: dosage === ''
+      ? ''
+      : (isCustomPrescriptionValue(optionSets.dosage, dosage)
+        ? CUSTOM_PRESCRIPTION_VALUE
+        : selectedPrescriptionOption(optionSets.dosage, dosage)),
+    frequency_option: frequency === ''
+      ? ''
+      : (isCustomPrescriptionValue(optionSets.frequency, frequency)
+        ? CUSTOM_PRESCRIPTION_VALUE
+        : selectedPrescriptionOption(optionSets.frequency, frequency)),
+    duration_option: duration === ''
+      ? ''
+      : (isCustomPrescriptionValue(optionSets.duration, duration)
+        ? CUSTOM_PRESCRIPTION_VALUE
+        : selectedPrescriptionOption(optionSets.duration, duration)),
+  };
 }
 
 function calculateAgeLabel(birthDate) {
@@ -172,6 +335,7 @@ const TAB_CONFIG = {
 
 function ClinicalWorkspaceModal({
   activeTab,
+  clinicalSuggestions,
   feedback,
   loadingMedical,
   loadingPrescription,
@@ -209,6 +373,12 @@ function ClinicalWorkspaceModal({
       ].filter(Boolean).join(' | ')
     : 'No previous medical history recorded.';
   const patientAgeLabel = calculateAgeLabel(patient.birthDate);
+  const prescriptionOptions = {
+    medication: mergeOptionLists(COMMON_DENTAL_MEDICATIONS, clinicalSuggestions?.prescription?.medication),
+    dosage: mergeOptionLists(STANDARD_DOSAGE_OPTIONS, clinicalSuggestions?.prescription?.dosage),
+    frequency: mergeOptionLists(STANDARD_FREQUENCY_OPTIONS, clinicalSuggestions?.prescription?.frequency),
+    duration: mergeOptionLists(STANDARD_DURATION_OPTIONS, clinicalSuggestions?.prescription?.duration),
+  };
 
   return (
     <div className="workspace-modal-backdrop" onClick={onClose} role="presentation">
@@ -249,7 +419,7 @@ function ClinicalWorkspaceModal({
             ))}
           </div>
 
-          {feedback ? <p className="form-error">{feedback}</p> : null}
+          {feedback ? <p className={feedbackType === 'success' ? 'form-success' : 'form-error'}>{feedback}</p> : null}
 
           {activeTab === 'medical-records' ? (
             <div className="workspace-history-list">
@@ -414,43 +584,119 @@ function ClinicalWorkspaceModal({
                     <div className="form-grid">
                       <label className="field-block">
                         <span>Medication</span>
-                        <input
-                          onChange={(event) => onChangePrescriptionEntry(index, 'medication', event.target.value)}
-                          placeholder="e.g., Amoxicillin"
+                        <select
+                          onChange={(event) => {
+                            const { value } = event.target;
+                            onChangePrescriptionEntry(index, 'medication_option', value);
+                            onChangePrescriptionEntry(index, 'medication', value === CUSTOM_PRESCRIPTION_VALUE ? '' : value);
+                          }}
                           required
-                          type="text"
-                          value={entry.medication}
-                        />
+                          value={entry.medication_option ?? ''}
+                        >
+                          <option value="">Choose medication</option>
+                          <option value={CUSTOM_PRESCRIPTION_VALUE}>Other</option>
+                          {prescriptionOptions.medication.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                        {entry.medication_option === CUSTOM_PRESCRIPTION_VALUE ? (
+                          <input
+                            onChange={(event) => onChangePrescriptionEntry(index, 'medication', event.target.value)}
+                            placeholder="Type custom medication"
+                            required
+                            type="text"
+                            value={entry.medication}
+                          />
+                        ) : null}
                       </label>
                       <label className="field-block">
                         <span>Dosage</span>
-                        <input
-                          onChange={(event) => onChangePrescriptionEntry(index, 'dosage', event.target.value)}
-                          placeholder="e.g., 500mg"
+                        <select
+                          onChange={(event) => {
+                            const { value } = event.target;
+                            onChangePrescriptionEntry(index, 'dosage_option', value);
+                            onChangePrescriptionEntry(index, 'dosage', value === CUSTOM_PRESCRIPTION_VALUE ? '' : value);
+                          }}
                           required
-                          type="text"
-                          value={entry.dosage}
-                        />
+                          value={entry.dosage_option ?? ''}
+                        >
+                          <option value="">Choose dosage</option>
+                          <option value={CUSTOM_PRESCRIPTION_VALUE}>Other</option>
+                          {prescriptionOptions.dosage.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                        {entry.dosage_option === CUSTOM_PRESCRIPTION_VALUE ? (
+                          <input
+                            onChange={(event) => onChangePrescriptionEntry(index, 'dosage', event.target.value)}
+                            placeholder="Type custom dosage"
+                            required
+                            type="text"
+                            value={entry.dosage}
+                          />
+                        ) : null}
                       </label>
                       <label className="field-block">
                         <span>Frequency</span>
-                        <input
-                          onChange={(event) => onChangePrescriptionEntry(index, 'frequency', event.target.value)}
-                          placeholder="e.g., Every 8 hours"
+                        <select
+                          onChange={(event) => {
+                            const { value } = event.target;
+                            onChangePrescriptionEntry(index, 'frequency_option', value);
+                            onChangePrescriptionEntry(index, 'frequency', value === CUSTOM_PRESCRIPTION_VALUE ? '' : value);
+                          }}
                           required
-                          type="text"
-                          value={entry.frequency}
-                        />
+                          value={entry.frequency_option ?? ''}
+                        >
+                          <option value="">Choose frequency</option>
+                          <option value={CUSTOM_PRESCRIPTION_VALUE}>Other</option>
+                          {prescriptionOptions.frequency.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                        {entry.frequency_option === CUSTOM_PRESCRIPTION_VALUE ? (
+                          <input
+                            onChange={(event) => onChangePrescriptionEntry(index, 'frequency', event.target.value)}
+                            placeholder="Type custom frequency"
+                            required
+                            type="text"
+                            value={entry.frequency}
+                          />
+                        ) : null}
                       </label>
                       <label className="field-block">
                         <span>Duration</span>
-                        <input
-                          onChange={(event) => onChangePrescriptionEntry(index, 'duration', event.target.value)}
-                          placeholder="e.g., 7 days"
+                        <select
+                          onChange={(event) => {
+                            const { value } = event.target;
+                            onChangePrescriptionEntry(index, 'duration_option', value);
+                            onChangePrescriptionEntry(index, 'duration', value === CUSTOM_PRESCRIPTION_VALUE ? '' : value);
+                          }}
                           required
-                          type="text"
-                          value={entry.duration}
-                        />
+                          value={entry.duration_option ?? ''}
+                        >
+                          <option value="">Choose duration</option>
+                          <option value={CUSTOM_PRESCRIPTION_VALUE}>Other</option>
+                          {prescriptionOptions.duration.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                        {entry.duration_option === CUSTOM_PRESCRIPTION_VALUE ? (
+                          <input
+                            onChange={(event) => onChangePrescriptionEntry(index, 'duration', event.target.value)}
+                            placeholder="Type custom duration"
+                            required
+                            type="text"
+                            value={entry.duration}
+                          />
+                        ) : null}
                       </label>
                       <label className="field-block field-block--wide">
                         <span>Instructions/Notes</span>
@@ -507,6 +753,8 @@ export function DentistPatientsPage({
   const [savingMedical, setSavingMedical] = React.useState(false);
   const [savingPrescription, setSavingPrescription] = React.useState(false);
   const [feedback, setFeedback] = React.useState('');
+  const [feedbackType, setFeedbackType] = React.useState('error');
+  const [clinicalSuggestions, setClinicalSuggestions] = React.useState(EMPTY_CLINICAL_SUGGESTIONS);
   const [editingMedicalId, setEditingMedicalId] = React.useState(null);
   const [editingPrescriptionId, setEditingPrescriptionId] = React.useState(null);
   const [medicalForm, setMedicalForm] = React.useState({
@@ -547,6 +795,7 @@ export function DentistPatientsPage({
     try {
       const response = await onLoadMedicalRecords(patientId);
       setMedicalRecords(response?.items ?? []);
+      setClinicalSuggestions((current) => mergeSuggestionPayload(current, response?.suggestions));
     } finally {
       setLoadingMedical(false);
     }
@@ -557,6 +806,7 @@ export function DentistPatientsPage({
     try {
       const response = await onLoadPrescriptions(patientId);
       setPrescriptions(response?.items ?? []);
+      setClinicalSuggestions((current) => mergeSuggestionPayload(current, response?.suggestions));
     } finally {
       setLoadingPrescription(false);
     }
@@ -567,8 +817,10 @@ export function DentistPatientsPage({
     setActivePatient(patient);
     setActiveTab(config.defaultTab);
     setFeedback('');
+    setFeedbackType('error');
     setEditingMedicalId(null);
     setEditingPrescriptionId(null);
+    setClinicalSuggestions(EMPTY_CLINICAL_SUGGESTIONS);
     setMedicalRecords([]);
     setPrescriptions([]);
     setMedicalForm({
@@ -600,6 +852,7 @@ export function DentistPatientsPage({
   async function handleTabChange(tab) {
     setActiveTab(tab);
     setFeedback('');
+    setFeedbackType('error');
 
     if (!activePatient) {
       return;
@@ -641,6 +894,16 @@ export function DentistPatientsPage({
     }));
   }
 
+  function serializePrescriptionEntry(entry) {
+    return {
+      medication: entry.medication,
+      dosage: entry.dosage,
+      frequency: entry.frequency,
+      duration: entry.duration,
+      instructions: entry.instructions,
+    };
+  }
+
   function handleAddPrescriptionEntry() {
     setPrescriptionForm((current) => ({
       ...current,
@@ -663,6 +926,7 @@ export function DentistPatientsPage({
 
     setSavingMedical(true);
     setFeedback('');
+    setFeedbackType('error');
 
     try {
       const payload = {
@@ -674,9 +938,13 @@ export function DentistPatientsPage({
         ? await onUpdateMedicalRecord({ id: editingMedicalId, ...payload })
         : await onCreateMedicalRecord(payload);
       setMedicalRecords(response?.items ?? []);
+      setClinicalSuggestions((current) => mergeSuggestionPayload(current, response?.suggestions));
       setEditingMedicalId(null);
+      setFeedbackType('success');
+      setFeedback(response?.message ?? (editingMedicalId ? 'Medical record updated successfully.' : 'Medical record saved successfully.'));
       setActiveTab('medical-records');
     } catch (error) {
+      setFeedbackType('error');
       setFeedback(error.message);
     } finally {
       setSavingMedical(false);
@@ -691,6 +959,7 @@ export function DentistPatientsPage({
 
     setSavingPrescription(true);
     setFeedback('');
+    setFeedbackType('error');
 
     try {
       const basePayload = {
@@ -698,19 +967,23 @@ export function DentistPatientsPage({
         date_prescribed: toDateOnly(prescriptionForm.date_prescribed),
       };
       const payload = editingPrescriptionId
-        ? { ...basePayload, ...prescriptionForm.entries[0] }
-        : { ...basePayload, entries: prescriptionForm.entries };
+        ? { ...basePayload, ...serializePrescriptionEntry(prescriptionForm.entries[0]) }
+        : { ...basePayload, entries: prescriptionForm.entries.map(serializePrescriptionEntry) };
       const response = editingPrescriptionId
         ? await onUpdatePrescription({ id: editingPrescriptionId, ...payload })
         : await onCreatePrescription(payload);
       setPrescriptions(response?.items ?? []);
+      setClinicalSuggestions((current) => mergeSuggestionPayload(current, response?.suggestions));
       setEditingPrescriptionId(null);
       setPrescriptionForm({
         date_prescribed: nowDateTimeLocalValue(),
         entries: [emptyPrescriptionEntry()],
       });
+      setFeedbackType('success');
+      setFeedback(response?.message ?? (editingPrescriptionId ? 'Prescription updated successfully.' : 'Prescription saved successfully.'));
       setActiveTab('prescription-history');
     } catch (error) {
+      setFeedbackType('error');
       setFeedback(error.message);
     } finally {
       setSavingPrescription(false);
@@ -720,6 +993,7 @@ export function DentistPatientsPage({
   function handleEditMedicalRecord(record) {
     setEditingMedicalId(record.id);
     setFeedback('');
+    setFeedbackType('error');
     setMedicalForm({
       visit_date: toDateTimeLocalValue(record.visitDate),
       presenting_complaint: record.presentingComplaint ?? '',
@@ -738,15 +1012,17 @@ export function DentistPatientsPage({
   function handleEditPrescription(record) {
     setEditingPrescriptionId(record.id);
     setFeedback('');
+    setFeedbackType('error');
+    const optionSets = buildPrescriptionOptionSets(clinicalSuggestions);
     setPrescriptionForm({
       date_prescribed: toDateTimeLocalValue(record.datePrescribed),
-      entries: [{
+      entries: [prescriptionEntryFromValues({
         medication: record.medication ?? '',
         dosage: record.dosage ?? '',
         frequency: record.frequency ?? '',
         duration: record.duration ?? '',
         instructions: record.instructions ?? '',
-      }],
+      }, optionSets)],
     });
     setActiveTab('new-prescription');
   }
@@ -856,8 +1132,9 @@ export function DentistPatientsPage({
 
       {activePatient ? (
         <ClinicalWorkspaceModal
-          activeTab={activeTab}
-          editingMedicalId={editingMedicalId}
+        activeTab={activeTab}
+        clinicalSuggestions={clinicalSuggestions}
+        editingMedicalId={editingMedicalId}
           editingPrescriptionId={editingPrescriptionId}
           feedback={feedback}
           loadingMedical={loadingMedical}

@@ -240,6 +240,7 @@ final class ClinicalRecordsController extends Controller
 
         Response::json([
             'items' => $this->prescriptionItems($pdo, $patientId, $role, $staffId),
+            'suggestions' => $this->clinicalSuggestionsPayload($pdo),
         ]);
     }
 
@@ -339,6 +340,12 @@ final class ClinicalRecordsController extends Controller
                 'created_at' => date('Y-m-d H:i:s'),
                 'patient_name' => $this->patientDisplayName($patient),
             ]);
+            $this->learnPrescriptionSuggestions($pdo, [
+                'medication' => $medication,
+                'dosage' => $dosage,
+                'frequency' => $frequency,
+                'duration' => $duration,
+            ]);
             $savedAny = true;
         }
 
@@ -349,6 +356,7 @@ final class ClinicalRecordsController extends Controller
         Response::json([
             'message' => 'Prescription saved successfully.',
             'items' => $this->prescriptionItems($pdo, $patientId, $role, $staffId),
+            'suggestions' => $this->clinicalSuggestionsPayload($pdo),
         ]);
     }
 
@@ -411,9 +419,17 @@ final class ClinicalRecordsController extends Controller
             'edited_at' => date('Y-m-d H:i:s'),
         ]);
 
+        $this->learnPrescriptionSuggestions($pdo, [
+            'medication' => $medication,
+            'dosage' => $dosage,
+            'frequency' => $frequency,
+            'duration' => $duration,
+        ]);
+
         Response::json([
             'message' => 'Prescription updated successfully.',
             'items' => $this->prescriptionItems($pdo, $patientId, $role, $staffId),
+            'suggestions' => $this->clinicalSuggestionsPayload($pdo),
         ]);
     }
 
@@ -605,10 +621,148 @@ final class ClinicalRecordsController extends Controller
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
 
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS clinical_suggestions (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                suggestion_type VARCHAR(120) NOT NULL,
+                value TEXT NOT NULL,
+                normalized_value VARCHAR(255) NOT NULL,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL,
+                UNIQUE KEY uniq_clinical_suggestion (suggestion_type, normalized_value)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+
         $this->ensureColumn($pdo, 'medical_records', 'edited_by_name', 'ALTER TABLE medical_records ADD COLUMN edited_by_name VARCHAR(100) NULL AFTER patient_name');
         $this->ensureColumn($pdo, 'medical_records', 'edited_at', 'ALTER TABLE medical_records ADD COLUMN edited_at DATETIME NULL AFTER edited_by_name');
         $this->ensureColumn($pdo, 'prescriptions', 'edited_by_name', 'ALTER TABLE prescriptions ADD COLUMN edited_by_name VARCHAR(100) NULL AFTER patient_name');
         $this->ensureColumn($pdo, 'prescriptions', 'edited_at', 'ALTER TABLE prescriptions ADD COLUMN edited_at DATETIME NULL AFTER edited_by_name');
+    }
+
+    private function clinicalSuggestionsPayload(PDO $pdo): array
+    {
+        return [
+            'prescription' => [
+                'medication' => $this->suggestionsForType($pdo, 'prescription.medication'),
+                'dosage' => $this->suggestionsForType($pdo, 'prescription.dosage'),
+                'frequency' => $this->suggestionsForType($pdo, 'prescription.frequency'),
+                'duration' => $this->suggestionsForType($pdo, 'prescription.duration'),
+            ],
+        ];
+    }
+
+    private function learnPrescriptionSuggestions(PDO $pdo, array $values): void
+    {
+        foreach ($values as $field => $value) {
+            $this->saveSuggestion($pdo, 'prescription.' . $field, (string) $value);
+        }
+    }
+
+    private function saveSuggestion(PDO $pdo, string $type, string $value): void
+    {
+        $trimmedValue = trim($value);
+        if ($trimmedValue === '') {
+            return;
+        }
+
+        $normalizedValue = function_exists('mb_strtolower')
+            ? mb_strtolower($trimmedValue, 'UTF-8')
+            : strtolower($trimmedValue);
+        $timestamp = date('Y-m-d H:i:s');
+
+        $statement = $pdo->prepare(
+            'INSERT INTO clinical_suggestions (suggestion_type, value, normalized_value, created_at, updated_at)
+             VALUES (:suggestion_type, :value, :normalized_value, :created_at, :updated_at)
+             ON DUPLICATE KEY UPDATE value = VALUES(value), updated_at = VALUES(updated_at)'
+        );
+        $statement->execute([
+            'suggestion_type' => $type,
+            'value' => $trimmedValue,
+            'normalized_value' => $normalizedValue,
+            'created_at' => $timestamp,
+            'updated_at' => $timestamp,
+        ]);
+    }
+
+    private function suggestionsForType(PDO $pdo, string $type): array
+    {
+        $values = [];
+        $statement = $pdo->prepare(
+            'SELECT value
+             FROM clinical_suggestions
+             WHERE suggestion_type = :suggestion_type
+             ORDER BY updated_at DESC, id DESC
+             LIMIT 12'
+        );
+        $statement->execute(['suggestion_type' => $type]);
+        $values = array_map(
+            static fn (array $row): string => trim((string) ($row['value'] ?? '')),
+            $statement->fetchAll(PDO::FETCH_ASSOC)
+        );
+
+        foreach ($this->fallbackSuggestionsForType($pdo, $type) as $fallbackValue) {
+            $values[] = $fallbackValue;
+        }
+
+        return $this->uniqueSuggestionValues($values);
+    }
+
+    private function fallbackSuggestionsForType(PDO $pdo, string $type): array
+    {
+        $map = [
+            'prescription.medication' => ['table' => 'prescriptions', 'column' => 'medication'],
+            'prescription.dosage' => ['table' => 'prescriptions', 'column' => 'dosage'],
+            'prescription.frequency' => ['table' => 'prescriptions', 'column' => 'frequency'],
+            'prescription.duration' => ['table' => 'prescriptions', 'column' => 'duration'],
+        ];
+
+        if (!isset($map[$type])) {
+            return [];
+        }
+
+        $table = $map[$type]['table'];
+        $column = $map[$type]['column'];
+        $statement = $pdo->query(
+            "SELECT DISTINCT {$column} AS value
+             FROM {$table}
+             WHERE {$column} IS NOT NULL AND TRIM({$column}) <> ''
+             ORDER BY id DESC
+             LIMIT 12"
+        );
+
+        return array_map(
+            static fn (array $row): string => trim((string) ($row['value'] ?? '')),
+            $statement ? $statement->fetchAll(PDO::FETCH_ASSOC) : []
+        );
+    }
+
+    private function uniqueSuggestionValues(array $values): array
+    {
+        $seen = [];
+        $result = [];
+
+        foreach ($values as $value) {
+            $trimmedValue = trim((string) $value);
+            if ($trimmedValue === '') {
+                continue;
+            }
+
+            $normalizedValue = function_exists('mb_strtolower')
+                ? mb_strtolower($trimmedValue, 'UTF-8')
+                : strtolower($trimmedValue);
+            if (isset($seen[$normalizedValue])) {
+                continue;
+            }
+
+            $seen[$normalizedValue] = true;
+            $result[] = $trimmedValue;
+
+            if (count($result) >= 12) {
+                break;
+            }
+        }
+
+        return $result;
     }
 
     private function ensureColumn(PDO $pdo, string $table, string $column, string $sql): void

@@ -1,4 +1,5 @@
 import React from 'react';
+import { DateInputField } from './DateInputField';
 
 export function FormPanel({ title, description, fields, actionLabel }) {
   return (
@@ -17,8 +18,13 @@ export function FormPanel({ title, description, fields, actionLabel }) {
             <span>{field.label}</span>
             {field.type === 'textarea' ? (
               <textarea placeholder={field.placeholder} rows={4} />
+            ) : field.type === 'date' ? (
+              <DateInputField name={field.label.toLowerCase().replace(/\s+/g, '_')} placeholder="dd/mm/yyyy" />
             ) : (
-              <input placeholder={field.placeholder} type={field.type ?? 'text'} />
+              <input
+                placeholder={field.placeholder}
+                type={field.type ?? 'text'}
+              />
             )}
           </label>
         ))}

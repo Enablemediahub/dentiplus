@@ -50,7 +50,7 @@ function clampPage(page, totalPages) {
   return Math.min(Math.max(page, 1), totalPages);
 }
 
-function AssignPatientModal({ candidatePatients, dentists, isOpen, onClose, onSubmit }) {
+function AssignPatientModal({ candidatePatients, dentists, isOpen, onClose, onSuccess, onSubmit }) {
   const [form, setForm] = React.useState({
     patient_id: '',
     dentist_id: '',
@@ -89,11 +89,12 @@ function AssignPatientModal({ candidatePatients, dentists, isOpen, onClose, onSu
     setFeedback('');
 
     try {
-      await onSubmit({
+      const response = await onSubmit({
         patient_id: Number(form.patient_id),
         dentist_id: Number(form.dentist_id),
         assignment_visit_reason: form.assignment_visit_reason,
       });
+      onSuccess?.(response);
       onClose();
     } catch (error) {
       setFeedback(error.message);
@@ -135,7 +136,15 @@ function AssignPatientModal({ candidatePatients, dentists, isOpen, onClose, onSu
                 <option value="">Choose patient</option>
                 {filteredPatients.map((patient) => (
                   <option key={patient.id} value={patient.id}>
-                    {patient.patientName} | {patient.folderId} | {formatPhoneNumber(patient.phone)}
+                    {patient.patientName}
+                    {' | '}
+                    {patient.folderId}
+                    {' | '}
+                    {formatPhoneNumber(patient.phone)}
+                    {' | '}
+                    {patient.status}
+                    {' | '}
+                    {patient.dentistName ?? 'Unassigned'}
                   </option>
                 ))}
               </select>
@@ -181,6 +190,7 @@ function AssignPatientModal({ candidatePatients, dentists, isOpen, onClose, onSu
 
 export function ReceptionAssignPatientPage({ assignments, onAssignPatient, onCompleteAssignment }) {
   const [search, setSearch] = React.useState('');
+  const [successMessage, setSuccessMessage] = React.useState('');
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [savingId, setSavingId] = React.useState(null);
   const [rowsPerPage, setRowsPerPage] = React.useState(15);
@@ -209,10 +219,11 @@ export function ReceptionAssignPatientPage({ assignments, onAssignPatient, onCom
     setSavingId(item.assignmentId);
 
     try {
-      await onCompleteAssignment({
+      const response = await onCompleteAssignment({
         assignment_id: item.assignmentId,
         patient_id: item.patientId,
       });
+      setSuccessMessage(response?.message ?? 'Patient assignment updated successfully.');
     } finally {
       setSavingId(null);
     }
@@ -233,6 +244,7 @@ export function ReceptionAssignPatientPage({ assignments, onAssignPatient, onCom
         </div>
 
         <div className="reception-filter-strip">
+          {successMessage ? <p className="form-success">{successMessage}</p> : null}
           <label className="field-block reception-inline-field reception-search-field">
             <span>Search waiting list</span>
             <PortalIcon className="reception-search-icon" name="search" />
@@ -358,6 +370,7 @@ export function ReceptionAssignPatientPage({ assignments, onAssignPatient, onCom
         dentists={dentists}
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+        onSuccess={(response) => setSuccessMessage(response?.message ?? 'Patient assigned successfully.')}
         onSubmit={onAssignPatient}
       />
     </>

@@ -51,13 +51,73 @@ function matchesSearch(item, query) {
   ].join(' ').toLowerCase().includes(trimmed);
 }
 
+function appointmentDateTime(item) {
+  const date = String(item.date ?? '').trim();
+  const time = String(item.time ?? '').trim() || '00:00';
+  const parsed = new Date(`${date}T${time}:00`);
+
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function isSameWeek(date, now) {
+  const start = new Date(now);
+  const day = start.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() + diffToMonday);
+
+  const end = new Date(start);
+  end.setDate(end.getDate() + 7);
+
+  return date >= start && date < end;
+}
+
+function isSameMonth(date, now) {
+  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+}
+
+function matchesDateFocus(item, focus, now) {
+  if (focus === 'all') {
+    return true;
+  }
+
+  const parsed = appointmentDateTime(item);
+  if (parsed === null) {
+    return false;
+  }
+
+  if (focus === 'today') {
+    return item.isToday;
+  }
+
+  if (parsed < now) {
+    return false;
+  }
+
+  if (focus === 'week') {
+    return isSameWeek(parsed, now);
+  }
+
+  if (focus === 'month') {
+    return isSameMonth(parsed, now);
+  }
+
+  if (focus === 'upcoming') {
+    return true;
+  }
+
+  return true;
+}
+
 export function AdminAppointmentsPage({ appointments, onCreateAppointment, patients }) {
   const [search, setSearch] = React.useState('');
+  const [successMessage, setSuccessMessage] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState('all');
-  const [dateFilter, setDateFilter] = React.useState('all');
+  const [dateFilter, setDateFilter] = React.useState('week');
   const [rowsPerPage, setRowsPerPage] = React.useState(15);
   const [page, setPage] = React.useState(1);
   const [modalOpen, setModalOpen] = React.useState(false);
+  const now = new Date();
 
   const items = appointments?.items ?? [];
   const dentists = appointments?.dentists ?? [];
@@ -66,9 +126,7 @@ export function AdminAppointmentsPage({ appointments, onCreateAppointment, patie
   const filteredItems = items.filter((item) => {
     const normalizedStatus = String(item.status ?? '').toLowerCase().replace(/\s+/g, '_');
     const matchesStatus = statusFilter === 'all' || normalizedStatus === statusFilter;
-    const matchesDate = dateFilter === 'all'
-      || (dateFilter === 'today' && item.isToday)
-      || (dateFilter === 'upcoming' && !item.isToday);
+    const matchesDate = matchesDateFocus(item, dateFilter, now);
 
     return matchesStatus && matchesDate && matchesSearch(item, search);
   });
@@ -108,6 +166,8 @@ export function AdminAppointmentsPage({ appointments, onCreateAppointment, patie
           </div>
         </div>
 
+        {successMessage ? <p className="form-success">{successMessage}</p> : null}
+
         <div className="reception-filter-strip">
           <label className="field-block reception-inline-field reception-search-field">
             <span>Search appointments</span>
@@ -131,9 +191,11 @@ export function AdminAppointmentsPage({ appointments, onCreateAppointment, patie
           <label className="field-block reception-inline-field">
             <span>Date focus</span>
             <select onChange={(event) => setDateFilter(event.target.value)} value={dateFilter}>
-              <option value="all">All dates</option>
+              <option value="week">This week</option>
+              <option value="month">This month</option>
+              <option value="upcoming">All upcoming</option>
               <option value="today">Today only</option>
-              <option value="upcoming">Upcoming only</option>
+              <option value="all">All dates</option>
             </select>
           </label>
           <label className="field-block reception-inline-field">
@@ -237,6 +299,7 @@ export function AdminAppointmentsPage({ appointments, onCreateAppointment, patie
         dentists={dentists}
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
+        onSuccess={(response) => setSuccessMessage(response?.message ?? 'Appointment booked successfully.')}
         onSubmit={onCreateAppointment}
         patients={patientItems}
       />

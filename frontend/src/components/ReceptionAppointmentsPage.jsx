@@ -38,12 +38,62 @@ function matchesSearch(item, query) {
   return haystack.includes(query.toLowerCase());
 }
 
+function appointmentDateTime(item) {
+  const date = String(item.date ?? '').trim();
+  const time = String(item.time ?? '').trim() || '00:00';
+  const parsed = new Date(`${date}T${time}:00`);
+
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function isUpcomingAppointment(item, now) {
+  const parsed = appointmentDateTime(item);
+  return parsed !== null && parsed >= now;
+}
+
+function isSameWeek(date, now) {
+  const start = new Date(now);
+  const day = start.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() + diffToMonday);
+
+  const end = new Date(start);
+  end.setDate(end.getDate() + 7);
+
+  return date >= start && date < end;
+}
+
+function isSameMonth(date, now) {
+  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+}
+
+function matchesUpcomingWindow(item, window, now) {
+  const parsed = appointmentDateTime(item);
+  if (parsed === null || parsed < now) {
+    return false;
+  }
+
+  if (window === 'week') {
+    return isSameWeek(parsed, now);
+  }
+
+  if (window === 'month') {
+    return isSameMonth(parsed, now);
+  }
+
+  return true;
+}
+
 export function ReceptionAppointmentsPage({ appointments, onCreateAppointment, patients }) {
   const [search, setSearch] = React.useState('');
+  const [successMessage, setSuccessMessage] = React.useState('');
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [todayPage, setTodayPage] = React.useState(1);
   const [notesPage, setNotesPage] = React.useState(1);
+  const [upcomingWindow, setUpcomingWindow] = React.useState('week');
   const rowsPerPage = 5;
+  const now = new Date();
 
   const items = appointments?.items ?? [];
   const todayItems = appointments?.todayItems ?? items.filter((item) => item.isToday);
@@ -51,16 +101,24 @@ export function ReceptionAppointmentsPage({ appointments, onCreateAppointment, p
   const patientItems = patients?.items ?? [];
   const filteredItems = items.filter((item) => matchesSearch(item, search));
   const filteredTodayItems = todayItems.filter((item) => matchesSearch(item, search));
+  const filteredUpcomingItems = filteredItems.filter((item) => matchesUpcomingWindow(item, upcomingWindow, now));
+  const filteredNewItems = [...filteredItems]
+    .filter((item) => {
+      const parsed = appointmentDateTime(item);
+      return parsed !== null && parsed >= now && String(item.status ?? '').toLowerCase() === 'scheduled';
+    })
+    .sort((left, right) => Number(right.id ?? 0) - Number(left.id ?? 0))
+    .slice(0, 5);
 
   React.useEffect(() => {
     setTodayPage(1);
     setNotesPage(1);
-  }, [search]);
+  }, [search, upcomingWindow]);
 
   const todayPageCount = Math.max(1, Math.ceil(filteredTodayItems.length / rowsPerPage));
-  const notesPageCount = Math.max(1, Math.ceil(filteredItems.length / rowsPerPage));
+  const notesPageCount = Math.max(1, Math.ceil(filteredUpcomingItems.length / rowsPerPage));
   const pagedTodayItems = filteredTodayItems.slice((todayPage - 1) * rowsPerPage, todayPage * rowsPerPage);
-  const pagedNotesItems = filteredItems.slice((notesPage - 1) * rowsPerPage, notesPage * rowsPerPage);
+  const pagedNotesItems = filteredUpcomingItems.slice((notesPage - 1) * rowsPerPage, notesPage * rowsPerPage);
 
   const statusCounts = filteredItems.reduce((accumulator, item) => {
     const key = String(item.status || '').toLowerCase();
@@ -82,6 +140,8 @@ export function ReceptionAppointmentsPage({ appointments, onCreateAppointment, p
           </button>
         </div>
 
+        {successMessage ? <p className="form-success">{successMessage}</p> : null}
+
         <div className="reception-filter-strip">
           <label className="field-block reception-inline-field reception-search-field">
             <span>Search bookings</span>
@@ -92,6 +152,14 @@ export function ReceptionAppointmentsPage({ appointments, onCreateAppointment, p
               type="text"
               value={search}
             />
+          </label>
+          <label className="field-block reception-inline-field">
+            <span>Upcoming focus</span>
+            <select onChange={(event) => setUpcomingWindow(event.target.value)} value={upcomingWindow}>
+              <option value="week">This week</option>
+              <option value="month">This month</option>
+              <option value="all">All upcoming</option>
+            </select>
           </label>
         </div>
 
@@ -107,15 +175,57 @@ export function ReceptionAppointmentsPage({ appointments, onCreateAppointment, p
             <p>Open future and same-day bookings.</p>
           </div>
           <div className="frontdesk-highlight">
-            <span>Completed</span>
-            <strong>{statusCounts.completed ?? 0}</strong>
-            <p>Visits already closed in the appointment ledger.</p>
+            <span>New bookings</span>
+            <strong>{filteredNewItems.length}</strong>
+            <p>Most recently booked scheduled appointments waiting for desk follow-through.</p>
           </div>
           <div className="frontdesk-highlight">
             <span>Available dentists</span>
             <strong>{dentists.length}</strong>
             <p>Filtered to the receptionist branch when applicable.</p>
           </div>
+        </div>
+      </section>
+
+      <section className="module-card">
+        <div className="panel-heading workspace-card__header">
+          <div>
+            <p className="eyebrow">New bookings</p>
+            <h3>Latest scheduled appointments</h3>
+          </div>
+          <span className="table-counter">{filteredNewItems.length} results</span>
+        </div>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Patient</th>
+                <th>Phone</th>
+                <th>Dentist</th>
+                <th>Procedure</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredNewItems.length ? filteredNewItems.map((item) => (
+                <tr key={`new-appointment-${item.id}`}>
+                  <td>{item.dateLabel}</td>
+                  <td>{item.time}</td>
+                  <td>{item.patientName}</td>
+                  <td>{formatPhoneNumber(item.phone)}</td>
+                  <td>{item.dentistName}</td>
+                  <td>{item.procedure}</td>
+                  <td>{item.status}</td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan="7">No new scheduled appointments match the current search.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -185,7 +295,7 @@ export function ReceptionAppointmentsPage({ appointments, onCreateAppointment, p
               <p className="eyebrow">Booking notes</p>
               <h3>Upcoming appointments</h3>
             </div>
-            <span className="table-counter">{filteredItems.length} results</span>
+            <span className="table-counter">{filteredUpcomingItems.length} results</span>
           </div>
           <div className="table-wrap">
             <table className="data-table">
@@ -209,7 +319,7 @@ export function ReceptionAppointmentsPage({ appointments, onCreateAppointment, p
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan="5">No appointments match the current search.</td>
+                    <td colSpan="5">No upcoming appointments match the current search and time window.</td>
                   </tr>
                 )}
               </tbody>
@@ -241,6 +351,7 @@ export function ReceptionAppointmentsPage({ appointments, onCreateAppointment, p
         dentists={dentists}
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+        onSuccess={(response) => setSuccessMessage(response?.message ?? 'Appointment booked successfully.')}
         onSubmit={onCreateAppointment}
         patients={patientItems}
       />

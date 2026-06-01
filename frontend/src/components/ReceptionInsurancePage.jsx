@@ -1,5 +1,7 @@
 import React from 'react';
+import { DateInputField } from './DateInputField';
 import { PortalIcon } from './PortalIcon';
+import { displayDateToIso, isoToDisplayDate, normalizeDateEntry } from '../lib/dateInput';
 
 function clampPage(page, totalPages) {
   if (totalPages <= 0) {
@@ -70,7 +72,7 @@ function InsuranceModal({ deleting, feedback, form, isOpen, onChange, onClose, o
             </label>
             <label className="field-block">
               <span>Expiry date</span>
-              <input name="expiry_date" onChange={onChange} required type="date" value={form.expiry_date} />
+              <DateInputField name="expiry_date" onChange={onChange} placeholder="dd/mm/yyyy" required value={form.expiry_date} />
             </label>
             <label className="field-block">
               <span>Covered amount</span>
@@ -137,7 +139,7 @@ export function ReceptionInsurancePage({ data, onDeleteInsurance, onUpdateInsura
       company: item.company ?? '',
       insurance_number: item.insuranceNumber ?? '',
       insurance_category: item.insuranceCategory ?? '',
-      expiry_date: item.expiryDate ?? '',
+      expiry_date: isoToDisplayDate(item.expiryDate ?? ''),
       insurance_covered_amount: item.coveredAmount ?? '',
     });
   }
@@ -146,7 +148,11 @@ export function ReceptionInsurancePage({ data, onDeleteInsurance, onUpdateInsura
     const { name, value } = event.target;
     setForm((current) => ({
       ...current,
-      [name]: ['expiry_date', 'insurance_covered_amount'].includes(name) ? value : normalizeLeadingUppercase(value),
+      [name]: name === 'expiry_date'
+        ? normalizeDateEntry(value)
+        : name === 'insurance_covered_amount'
+          ? value
+          : normalizeLeadingUppercase(value),
     }));
   }
 
@@ -159,7 +165,15 @@ export function ReceptionInsurancePage({ data, onDeleteInsurance, onUpdateInsura
     setSaving(true);
     setFeedback('');
     try {
-      await onUpdateInsurance(form);
+      const expiryDate = displayDateToIso(form.expiry_date);
+      if (!expiryDate) {
+        throw new Error('Expiry date must use the dd/mm/yyyy format.');
+      }
+
+      await onUpdateInsurance({
+        ...form,
+        expiry_date: expiryDate,
+      });
       setActiveRecord(null);
       setForm(null);
     } catch (error) {

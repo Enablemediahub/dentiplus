@@ -33,7 +33,7 @@ function matchesProcedureSearch(item, query) {
   ].join(' ').toLowerCase().includes(trimmed);
 }
 
-function ProcedureModal({ deleting, feedback, form, isOpen, onChange, onClose, onDelete, onSubmit, saving }) {
+function ProcedureModal({ deleting, feedback, feedbackType, form, isOpen, onChange, onClose, onDelete, onSubmit, saving }) {
   if (!isOpen || !form) {
     return null;
   }
@@ -72,7 +72,7 @@ function ProcedureModal({ deleting, feedback, form, isOpen, onChange, onClose, o
             </label>
           </div>
 
-          {feedback ? <p className="form-error">{feedback}</p> : null}
+          {feedback ? <p className={feedbackType === 'success' ? 'form-success' : 'form-error'}>{feedback}</p> : null}
 
           <div className="workspace-card__actions workspace-card__actions--between">
             {form.id ? (
@@ -104,6 +104,7 @@ export function AdminProcedureChargesPage({
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [procedureForm, setProcedureForm] = React.useState(null);
   const [feedback, setFeedback] = React.useState('');
+  const [feedbackType, setFeedbackType] = React.useState('error');
   const [saving, setSaving] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
 
@@ -157,6 +158,7 @@ export function AdminProcedureChargesPage({
 
     setSaving(true);
     setFeedback('');
+    setFeedbackType('error');
 
     try {
       const payload = {
@@ -167,14 +169,19 @@ export function AdminProcedureChargesPage({
       };
 
       if (procedureForm.id) {
-        await onUpdateProcedureCatalog(payload);
+        const response = await onUpdateProcedureCatalog(payload);
+        setFeedbackType('success');
+        setFeedback(response?.message ?? 'Procedure updated successfully.');
       } else {
-        await onCreateProcedureCatalog(payload);
+        const response = await onCreateProcedureCatalog(payload);
+        setFeedbackType('success');
+        setFeedback(response?.message ?? 'Procedure added successfully.');
       }
 
       setIsModalOpen(false);
       setProcedureForm(null);
     } catch (error) {
+      setFeedbackType('error');
       setFeedback(error.message);
     } finally {
       setSaving(false);
@@ -193,12 +200,16 @@ export function AdminProcedureChargesPage({
 
     setDeleting(true);
     setFeedback('');
+    setFeedbackType('error');
 
     try {
-      await onDeleteProcedureCatalog({ id: procedureForm.id });
+      const response = await onDeleteProcedureCatalog({ id: procedureForm.id });
+      setFeedbackType('success');
+      setFeedback(response?.message ?? 'Procedure deleted successfully.');
       setIsModalOpen(false);
       setProcedureForm(null);
     } catch (error) {
+      setFeedbackType('error');
       setFeedback(error.message);
     } finally {
       setDeleting(false);
@@ -221,6 +232,10 @@ export function AdminProcedureChargesPage({
             </button>
           </div>
         </div>
+
+        {feedback && !isModalOpen ? (
+          <p className={feedbackType === 'success' ? 'form-success' : 'form-error'}>{feedback}</p>
+        ) : null}
 
         <div className="reception-filter-strip">
           <label className="field-block reception-inline-field reception-search-field">
@@ -322,6 +337,7 @@ export function AdminProcedureChargesPage({
       <ProcedureModal
         deleting={deleting}
         feedback={feedback}
+        feedbackType={feedbackType}
         form={procedureForm}
         isOpen={isModalOpen}
         onChange={handleFormChange}
@@ -329,6 +345,7 @@ export function AdminProcedureChargesPage({
           setIsModalOpen(false);
           setProcedureForm(null);
           setFeedback('');
+          setFeedbackType('error');
         }}
         onDelete={handleDelete}
         onSubmit={handleSubmit}

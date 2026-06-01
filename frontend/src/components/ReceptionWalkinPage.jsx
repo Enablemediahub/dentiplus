@@ -52,7 +52,7 @@ function clampPage(page, totalPages) {
   return Math.min(Math.max(page, 1), totalPages);
 }
 
-function AssignFromWalkinModal({ dentists, isOpen, onClose, onSubmit, patient }) {
+function AssignFromWalkinModal({ dentists, isOpen, onClose, onSuccess, onSubmit, patient }) {
   const [form, setForm] = React.useState({
     dentist_id: '',
     assignment_visit_reason: '',
@@ -87,11 +87,12 @@ function AssignFromWalkinModal({ dentists, isOpen, onClose, onSubmit, patient })
     setFeedback('');
 
     try {
-      await onSubmit({
+      const response = await onSubmit({
         patient_id: Number(patient.id),
         dentist_id: Number(form.dentist_id),
         assignment_visit_reason: form.assignment_visit_reason,
       });
+      onSuccess?.(response);
       onClose();
     } catch (error) {
       setFeedback(error.message);
@@ -182,6 +183,7 @@ export function ReceptionWalkinPage({
   patients,
 }) {
   const [search, setSearch] = React.useState('');
+  const [successMessage, setSuccessMessage] = React.useState('');
   const [isRegistrationOpen, setIsRegistrationOpen] = React.useState(false);
   const [isAppointmentOpen, setIsAppointmentOpen] = React.useState(false);
   const [isAssignOpen, setIsAssignOpen] = React.useState(false);
@@ -233,6 +235,8 @@ export function ReceptionWalkinPage({
             </button>
           </div>
         </div>
+
+        {successMessage ? <p className="form-success">{successMessage}</p> : null}
 
         <div className="reception-filter-strip">
           <label className="field-block reception-inline-field reception-search-field">
@@ -352,6 +356,7 @@ export function ReceptionWalkinPage({
       <WalkinRegistrationModal
         isOpen={isRegistrationOpen}
         onClose={() => setIsRegistrationOpen(false)}
+        onSuccess={(response) => setSuccessMessage(response?.message ?? 'Patient registered successfully.')}
         onSubmit={onRegisterPatient}
       />
       <AppointmentBookingModal
@@ -359,6 +364,7 @@ export function ReceptionWalkinPage({
         initialPatient={appointmentPatient}
         isOpen={isAppointmentOpen}
         onClose={() => setIsAppointmentOpen(false)}
+        onSuccess={(response) => setSuccessMessage(response?.message ?? 'Appointment booked successfully.')}
         onSubmit={onCreateAppointment}
         patients={patients?.items ?? []}
       />
@@ -366,6 +372,7 @@ export function ReceptionWalkinPage({
         dentists={dentists}
         isOpen={isAssignOpen}
         onClose={() => setIsAssignOpen(false)}
+        onSuccess={(response) => setSuccessMessage(response?.message ?? 'Patient assigned successfully.')}
         onSubmit={onAssignPatient}
         patient={assignPatient}
       />
