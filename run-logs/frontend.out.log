@@ -1,0 +1,44 @@
+
+  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m2848[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5176[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.100.16:[1m5176[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://172.24.64.1:[1m5176[22m/[39m
+[2m[32m  ➜[39m[22m[2m  press [22m[1mh + enter[22m[2m to show help[22m
+[2m9:26:59 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionAssignPatientPage.jsx[22m
+[2m9:26:59 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionAssignPatientPage.jsx[22m
+[2m9:33:56 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/lib/api.js[22m
+[2m9:34:11 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/App.jsx[22m
+[2m9:34:28 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/App.jsx[22m
+[2m9:34:39 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ProcedureChargePage.jsx[22m
+[2m9:36:30 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ProcedureChargePage.jsx[22m
+[2m9:41:58 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionDeskModals.jsx[22m
+[2m9:42:10 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPatientDatabasePage.jsx[22m
+[2m9:42:20 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionInsurancePage.jsx[22m
+[2m9:42:29 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
+[2m9:43:03 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
+[2m9:43:43 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionExpensesPage.jsx[22m
+[2m9:43:58 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
+[2m9:44:04 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionExpensesPage.jsx[22m
+[2m9:44:27 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionDeskModals.jsx[22m
+[2m9:44:32 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/FormPanel.jsx[22m
+[2m9:53:22 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionDeskModals.jsx[22m
+[2m9:53:22 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionDeskModals.jsx[22m
+[2m10:02:18 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/lib/dateInput.js[22m
+[2m10:02:46 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m
+[2m10:03:00 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionDeskModals.jsx[22m
+[2m10:03:06 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPatientDatabasePage.jsx[22m
+[2m10:03:14 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionInsurancePage.jsx[22m
+[2m10:03:24 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionExpensesPage.jsx[22m
+[2m10:03:36 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
+[2m10:03:42 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/FormPanel.jsx[22m
+[2m10:04:16 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mindex.html[22m
+[2m10:23:29 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/AdminDatabasePage.jsx[22m
+[2m10:23:29 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/AdminDatabasePage.jsx[22m
+[2m12:13:39 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionDeskModals.jsx[22m
+[2m12:25:37 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionDeskModals.jsx[22m
+[2m1:26:39 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
+[2m1:27:29 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/lib/portal.js[22m
+[2m1:27:36 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/App.jsx[22m
+[2m1:37:31 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionAppointmentsPage.jsx[22m
+[2m1:37:31 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionAppointmentsPage.jsx[22m
