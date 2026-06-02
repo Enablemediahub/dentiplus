@@ -520,25 +520,24 @@ final class BillingController extends Controller
                 p.first_name,
                 p.last_name,
                 p.other_names,
-                COALESCE(br.branch, sb.branch, '') AS access_branch
+                {$this->accessBranchSelectSql('br')} AS access_branch
             FROM billing_records br
             LEFT JOIN procedures pr ON pr.id = br.procedure_id
             LEFT JOIN patients p ON p.id = br.patient_id
-            LEFT JOIN staff_branches sb ON sb.staff_id = br.dentist_id
             WHERE COALESCE(br.remaining_amount, br.amount, 0) > 0.009
               AND br.status <> 'rejected'";
 
         $params = [];
 
-        if ($role === 'receptionist' && $branch !== '') {
-            $sql .= ' AND COALESCE(br.branch, sb.branch, \'\') IN (\'\', :branch_match)';
-            $params['branch_match'] = $branch;
-        } elseif ($role === 'admin' && $branch !== '') {
-            $sql .= ' AND COALESCE(NULLIF(br.branch, \'\'), sb.branch, \'\') = :branch_match';
-            $params['branch_match'] = $branch;
-        } elseif ($role === 'dentist' && $staffId > 0) {
+        if ($role === 'dentist' && $staffId > 0) {
             $sql .= ' AND br.dentist_id = :dentist_id';
             $params['dentist_id'] = $staffId;
+        } else {
+            [$accessSql, $accessParams] = $this->branchAccessConstraint('br', $role, $branch);
+            if ($accessSql !== '') {
+                $sql .= $accessSql;
+                $params += $accessParams;
+            }
         }
 
         $sql .= ' ORDER BY br.created_at DESC, br.id DESC LIMIT 160';
@@ -564,25 +563,24 @@ final class BillingController extends Controller
                 pt.first_name,
                 pt.last_name,
                 pt.other_names,
-                COALESCE(br.branch, sb.branch, '') AS access_branch
+                {$this->accessBranchSelectSql('br')} AS access_branch
             FROM receipts r
             INNER JOIN payments p ON p.id = r.payment_id
             INNER JOIN billing_records br ON br.id = r.billing_id
             LEFT JOIN patients pt ON pt.id = br.patient_id
-            LEFT JOIN staff_branches sb ON sb.staff_id = br.dentist_id
             WHERE p.payment_method <> 'insurance'";
 
         $params = [];
 
-        if ($role === 'receptionist' && $branch !== '') {
-            $sql .= ' AND COALESCE(br.branch, sb.branch, \'\') IN (\'\', :branch_match)';
-            $params['branch_match'] = $branch;
-        } elseif ($role === 'admin' && $branch !== '') {
-            $sql .= ' AND COALESCE(NULLIF(br.branch, \'\'), sb.branch, \'\') = :branch_match';
-            $params['branch_match'] = $branch;
-        } elseif ($role === 'dentist' && $staffId > 0) {
+        if ($role === 'dentist' && $staffId > 0) {
             $sql .= ' AND br.dentist_id = :dentist_id';
             $params['dentist_id'] = $staffId;
+        } else {
+            [$accessSql, $accessParams] = $this->branchAccessConstraint('br', $role, $branch);
+            if ($accessSql !== '') {
+                $sql .= $accessSql;
+                $params += $accessParams;
+            }
         }
 
         $sql .= ' ORDER BY r.created_at DESC, r.id DESC';
@@ -641,35 +639,34 @@ final class BillingController extends Controller
 
     private function billingById(PDO $pdo, int $billingId, string $role, int $staffId, string $branch): ?array
     {
-        $statement = $pdo->prepare(
-            "SELECT
+        $sql = "SELECT
                 br.*,
                 p.first_name,
                 p.last_name,
                 p.other_names,
-                COALESCE(br.branch, sb.branch, '') AS access_branch
+                {$this->accessBranchSelectSql('br')} AS access_branch
              FROM billing_records br
              LEFT JOIN patients p ON p.id = br.patient_id
-             LEFT JOIN staff_branches sb ON sb.staff_id = br.dentist_id
              WHERE br.id = :id
-             LIMIT 1"
-        );
-        $statement->execute(['id' => $billingId]);
+             LIMIT 1";
+        $params = ['id' => $billingId];
+
+        if ($role === 'dentist' && $staffId > 0) {
+            $sql = str_replace(' LIMIT 1', ' AND br.dentist_id = :dentist_id LIMIT 1', $sql);
+            $params['dentist_id'] = $staffId;
+        } else {
+            [$accessSql, $accessParams] = $this->branchAccessConstraint('br', $role, $branch);
+            if ($accessSql !== '') {
+                $sql = str_replace(' LIMIT 1', $accessSql . ' LIMIT 1', $sql);
+                $params += $accessParams;
+            }
+        }
+
+        $statement = $pdo->prepare($sql);
+        $statement->execute($params);
         $billing = $statement->fetch(PDO::FETCH_ASSOC);
 
         if (!$billing) {
-            return null;
-        }
-
-        if ($role === 'receptionist' && $branch !== '' && !in_array((string) ($billing['access_branch'] ?? ''), ['', $branch], true)) {
-            return null;
-        }
-
-        if ($role === 'admin' && $branch !== '' && (string) ($billing['access_branch'] ?? '') !== $branch) {
-            return null;
-        }
-
-        if ($role === 'dentist' && $staffId > 0 && (int) ($billing['dentist_id'] ?? 0) !== $staffId) {
             return null;
         }
 
@@ -708,17 +705,29 @@ final class BillingController extends Controller
                 pt.first_name,
                 pt.last_name,
                 pt.other_names,
-                COALESCE(br.branch, sb.branch, '') AS access_branch
+                {$this->accessBranchSelectSql('br')} AS access_branch
             FROM receipts r
             LEFT JOIN payments p ON p.id = r.payment_id
             INNER JOIN billing_records br ON br.id = r.billing_id
             LEFT JOIN patients pt ON pt.id = br.patient_id
-            LEFT JOIN staff_branches sb ON sb.staff_id = br.dentist_id
             WHERE r.receipt_number = :receipt_number
             ORDER BY r.id ASC";
 
+        $params = ['receipt_number' => $receiptNumber];
+
+        if ($role === 'dentist' && $staffId > 0) {
+            $sql = str_replace(' ORDER BY r.id ASC', ' AND br.dentist_id = :dentist_id ORDER BY r.id ASC', $sql);
+            $params['dentist_id'] = $staffId;
+        } else {
+            [$accessSql, $accessParams] = $this->branchAccessConstraint('br', $role, $branch);
+            if ($accessSql !== '') {
+                $sql = str_replace(' ORDER BY r.id ASC', $accessSql . ' ORDER BY r.id ASC', $sql);
+                $params += $accessParams;
+            }
+        }
+
         $statement = $pdo->prepare($sql);
-        $statement->execute(['receipt_number' => $receiptNumber]);
+        $statement->execute($params);
         $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
 
         if ($rows === []) {
@@ -726,18 +735,6 @@ final class BillingController extends Controller
         }
 
         $first = $rows[0];
-        if ($role === 'receptionist' && $branch !== '' && !in_array((string) ($first['access_branch'] ?? ''), ['', $branch], true)) {
-            return null;
-        }
-
-        if ($role === 'admin' && $branch !== '' && (string) ($first['access_branch'] ?? '') !== $branch) {
-            return null;
-        }
-
-        if ($role === 'dentist' && $staffId > 0 && (int) ($first['dentist_id'] ?? 0) !== $staffId) {
-            return null;
-        }
-
         $bill = $this->mapBillingRow($pdo, $first);
         $seenPaymentKeys = [];
         $paymentLines = [];
@@ -1081,6 +1078,49 @@ final class BillingController extends Controller
         $statement->execute($params);
 
         return (int) $statement->fetchColumn();
+    }
+
+    private function accessBranchSelectSql(string $billingAlias): string
+    {
+        return "COALESCE(NULLIF({$billingAlias}.branch, ''), (SELECT MIN(sb.branch) FROM staff_branches sb WHERE sb.staff_id = {$billingAlias}.dentist_id), '')";
+    }
+
+    private function branchAccessConstraint(string $billingAlias, string $role, string $branch): array
+    {
+        if ($branch === '' || !in_array($role, ['receptionist', 'admin'], true)) {
+            return ['', []];
+        }
+
+        $explicitBranch = "NULLIF({$billingAlias}.branch, '')";
+        $staffBranchMatch = "EXISTS (
+                SELECT 1
+                FROM staff_branches sb_access
+                WHERE sb_access.staff_id = {$billingAlias}.dentist_id
+                  AND sb_access.branch = :branch_match
+            )";
+
+        if ($role === 'receptionist') {
+            return [
+                " AND (
+                    {$explicitBranch} = :branch_match
+                    OR ({$explicitBranch} IS NULL AND {$staffBranchMatch})
+                    OR ({$explicitBranch} IS NULL AND NOT EXISTS (
+                        SELECT 1
+                        FROM staff_branches sb_any
+                        WHERE sb_any.staff_id = {$billingAlias}.dentist_id
+                    ))
+                )",
+                ['branch_match' => $branch],
+            ];
+        }
+
+        return [
+            " AND (
+                {$explicitBranch} = :branch_match
+                OR ({$explicitBranch} IS NULL AND {$staffBranchMatch})
+            )",
+            ['branch_match' => $branch],
+        ];
     }
 
     private function formatDentistName(string $value): string
