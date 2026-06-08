@@ -72,6 +72,57 @@ function getTodayDateValue() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function parseDateValue(value) {
+  const text = String(value ?? '').trim();
+  if (!text) {
+    return null;
+  }
+
+  const isoLike = text.replace(' ', 'T');
+  const parsed = new Date(isoLike);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function addMonths(date, months) {
+  const copy = new Date(date.getTime());
+  copy.setMonth(copy.getMonth() + months);
+  return copy;
+}
+
+function resolveFrontdeskFees(patient) {
+  if (!patient?.lastVisitAt) {
+    return {
+      registrationFee: '100',
+      consultationFee: '100',
+      ruleLabel: 'New patient: registration and consultation default to GHS 100 each.',
+    };
+  }
+
+  const lastVisitDate = parseDateValue(patient.lastVisitAt);
+  if (!lastVisitDate) {
+    return {
+      registrationFee: '100',
+      consultationFee: '100',
+      ruleLabel: 'New patient: registration and consultation default to GHS 100 each.',
+    };
+  }
+
+  const sixMonthsAfterVisit = addMonths(lastVisitDate, 6);
+  if (new Date() >= sixMonthsAfterVisit) {
+    return {
+      registrationFee: '0',
+      consultationFee: '100',
+      ruleLabel: `Returning after 6 months: registration is GHS 0 and consultation is GHS 100. Last paid consultation was ${patient.lastVisitLabel}.`,
+    };
+  }
+
+  return {
+    registrationFee: '0',
+    consultationFee: '0',
+    ruleLabel: `Seen within the last 6 months: both fees default to GHS 0. Last paid consultation was ${patient.lastVisitLabel}.`,
+  };
+}
+
 function matchesSearch(item, query) {
   const trimmed = query.trim().toLowerCase();
   if (!trimmed) {
@@ -313,7 +364,7 @@ export function printThermalReceipt(receipt) {
 function FrontdeskBillingModal({ isOpen, onClose, onSubmit, patients }) {
   const [search, setSearch] = React.useState('');
   const [selectedPatientId, setSelectedPatientId] = React.useState('');
-  const [registrationFee, setRegistrationFee] = React.useState('50');
+  const [registrationFee, setRegistrationFee] = React.useState('100');
   const [consultationFee, setConsultationFee] = React.useState('100');
   const [notes, setNotes] = React.useState('');
   const [saving, setSaving] = React.useState(false);
@@ -326,15 +377,11 @@ function FrontdeskBillingModal({ isOpen, onClose, onSubmit, patients }) {
 
     setSearch('');
     setSelectedPatientId('');
-    setRegistrationFee('50');
+    setRegistrationFee('100');
     setConsultationFee('100');
     setNotes('');
     setFeedback('');
   }, [isOpen]);
-
-  if (!isOpen) {
-    return null;
-  }
 
   const filteredPatients = (patients ?? []).filter((item) => {
     const trimmed = search.trim().toLowerCase();
@@ -357,7 +404,21 @@ function FrontdeskBillingModal({ isOpen, onClose, onSubmit, patients }) {
   const selectedPatient = filteredPatients.find((item) => String(item.id) === String(selectedPatientId))
     ?? (patients ?? []).find((item) => String(item.id) === String(selectedPatientId))
     ?? null;
+  const suggestedFees = resolveFrontdeskFees(selectedPatient);
   const total = Number(registrationFee || 0) + Number(consultationFee || 0);
+
+  React.useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    setRegistrationFee(suggestedFees.registrationFee);
+    setConsultationFee(suggestedFees.consultationFee);
+  }, [isOpen, selectedPatientId, suggestedFees.consultationFee, suggestedFees.registrationFee]);
+
+  if (!isOpen) {
+    return null;
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -409,6 +470,7 @@ function FrontdeskBillingModal({ isOpen, onClose, onSubmit, patients }) {
                     <th>Select</th>
                     <th>Folder</th>
                     <th>Patient</th>
+                    <th>Last paid consultation</th>
                     <th>Visit reason</th>
                   </tr>
                 </thead>
@@ -420,6 +482,7 @@ function FrontdeskBillingModal({ isOpen, onClose, onSubmit, patients }) {
                       </td>
                       <td>{item.folderId}</td>
                       <td>{item.patientName}</td>
+                      <td>{item.lastVisitLabel}</td>
                       <td>{item.visitReason}</td>
                     </tr>
                   ))}
@@ -438,6 +501,10 @@ function FrontdeskBillingModal({ isOpen, onClose, onSubmit, patients }) {
               <label className="field-block">
                 <span>Total</span>
                 <input readOnly type="text" value={formatCurrency(total)} />
+              </label>
+              <label className="field-block field-block--wide">
+                <span>Fee rule</span>
+                <input readOnly type="text" value={selectedPatient ? suggestedFees.ruleLabel : 'Select a patient to autofill the current consultation and registration policy.'} />
               </label>
               <label className="field-block">
                 <span>Registration fee</span>
@@ -459,7 +526,7 @@ function FrontdeskBillingModal({ isOpen, onClose, onSubmit, patients }) {
           <div className="workspace-card__actions">
             <button className="primary-button" disabled={saving || !selectedPatientId} type="submit">
               <PortalIcon className="workspace-submit-icon" name="receipt" />
-              <span>{saving ? 'Creating bill...' : 'Create bill and continue to payment'}</span>
+              <span>{saving ? 'Creating bill...' : total > 0 ? 'Create bill and continue to payment' : 'Save no-fee visit'}</span>
             </button>
           </div>
         </form>
@@ -1515,7 +1582,7 @@ export function ReceptionPaymentsPage({
           if (message) {
             setSuccessMessage(message);
           }
-          if (bill) {
+          if (bill && Number(bill.balance ?? bill.amount ?? 0) > 0) {
             setSelectedBill(bill);
           }
         }}

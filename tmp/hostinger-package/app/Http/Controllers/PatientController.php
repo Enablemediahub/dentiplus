@@ -331,9 +331,20 @@ final class PatientController extends Controller
                 p.receptionist_id,
                 p.status,
                 p.created_at,
+                consultation_visits.last_consultation_payment_at,
                 COALESCE(NULLIF(p.branch, ''), sb.branch, '') AS access_branch
              FROM patients p
              LEFT JOIN staff_branches sb ON sb.staff_id = p.receptionist_id
+             LEFT JOIN (
+                SELECT
+                    br.patient_id,
+                    MAX(r.created_at) AS last_consultation_payment_at
+                FROM billing_records br
+                INNER JOIN receipts r ON r.billing_id = br.id
+                WHERE COALESCE(br.bill_type, 'procedure_charge') = 'frontdesk_fees'
+                  AND COALESCE(br.consultation_fee, 0) > 0
+                GROUP BY br.patient_id
+             ) consultation_visits ON consultation_visits.patient_id = p.id
              WHERE 1=1";
         $params = [];
 
@@ -385,7 +396,15 @@ final class PatientController extends Controller
                 is_walkin,
                 receptionist_id,
                 status,
-                created_at
+                created_at,
+                (
+                    SELECT MAX(r.created_at)
+                    FROM billing_records br
+                    INNER JOIN receipts r ON r.billing_id = br.id
+                    WHERE br.patient_id = patients.id
+                      AND COALESCE(br.bill_type, 'procedure_charge') = 'frontdesk_fees'
+                      AND COALESCE(br.consultation_fee, 0) > 0
+                ) AS last_consultation_payment_at
              FROM patients
              WHERE id = :id
              LIMIT 1"
@@ -456,6 +475,8 @@ final class PatientController extends Controller
             'receptionistId' => isset($row['receptionist_id']) ? (int) $row['receptionist_id'] : null,
             'status' => $status === '' ? 'Registered' : ucfirst($status),
             'createdAt' => (string) ($row['created_at'] ?? ''),
+            'lastVisitAt' => (string) ($row['last_consultation_payment_at'] ?? ''),
+            'lastVisitLabel' => !empty($row['last_consultation_payment_at']) ? date('d M Y', strtotime((string) $row['last_consultation_payment_at'])) : 'No consultation payment yet',
         ];
     }
 

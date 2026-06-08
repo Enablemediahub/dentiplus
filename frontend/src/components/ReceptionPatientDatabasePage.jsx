@@ -51,6 +51,7 @@ function matchesSearch(patient, query) {
     patient.gender,
     patient.address,
     patient.visitReason,
+    patient.lastVisitLabel,
     patient.status,
   ]
     .join(' ')
@@ -367,6 +368,7 @@ export function ReceptionPatientDatabasePage({
                 <th>Patient</th>
                 <th>Phone</th>
                 <th>Visit reason</th>
+                <th>Last visit</th>
                 <th>Status</th>
                 <th>Type</th>
                 <th>Action</th>
@@ -382,6 +384,7 @@ export function ReceptionPatientDatabasePage({
                   <td>{patient.patientName}</td>
                   <td>{formatPhoneNumber(patient.phone)}</td>
                   <td>{patient.visitReason}</td>
+                  <td>{patient.lastVisitLabel}</td>
                   <td>{patient.status}</td>
                   <td>{patient.isWalkin ? 'Walk-in' : 'Registered'}</td>
                   <td>
@@ -392,7 +395,7 @@ export function ReceptionPatientDatabasePage({
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan="7">No patient records match the current search and filters.</td>
+                  <td colSpan="8">No patient records match the current search and filters.</td>
                 </tr>
               )}
             </tbody>

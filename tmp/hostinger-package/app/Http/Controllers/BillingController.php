@@ -61,9 +61,6 @@ final class BillingController extends Controller
         }
 
         $amount = round($registrationFee + $consultationFee, 2);
-        if ($amount <= 0) {
-            Response::json(['message' => 'Add at least one fee amount before saving the bill.'], 422);
-        }
 
         $patient = $this->patientById($pdo, $patientId);
         if (!$patient) {
@@ -116,7 +113,7 @@ final class BillingController extends Controller
             'patient_name' => $patientName,
             'amount' => $amount,
             'remaining_amount' => $amount,
-            'status' => 'pending',
+            'status' => $amount > 0 ? 'pending' : 'completed',
             'notes' => implode(' | ', $summaryNotes),
             'procedures_data' => json_encode([], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             'bill_type' => 'frontdesk_fees',
@@ -128,7 +125,9 @@ final class BillingController extends Controller
         $billingId = (int) $pdo->lastInsertId();
 
         Response::json([
-            'message' => 'Frontdesk bill created successfully.',
+            'message' => $amount > 0
+                ? 'Frontdesk bill created successfully.'
+                : 'No fee was due for this visit, so the patient was cleared without payment.',
             'bill' => $this->billingItemById($pdo, $billingId, $role, $staffId, $branch),
             'items' => $this->openBills($pdo, $role, $staffId, $branch),
             'history' => $this->paymentHistory($pdo, $role, $staffId, $branch),
