@@ -51,6 +51,7 @@ export function AdminDashboard({
     { label: 'Mobile Money', value: formatCurrency(Number(breakdown.mobile_money ?? 0)), note: 'MoMo settlements confirmed today' },
     { label: 'Paystack', value: formatCurrency(Number(breakdown.paystack ?? 0)), note: 'Card and Paystack sales booked today' },
     { label: 'Bank', value: formatCurrency(Number(breakdown.bank ?? 0)), note: 'Bank-transfer sales received today' },
+    { label: 'eDental Store', value: formatCurrency(Number(breakdown.store_sales ?? 0)), note: 'Store counter sales booked today' },
   ];
 
   const operatingCards = [

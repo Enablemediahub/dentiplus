@@ -23,6 +23,7 @@ final class AuthController extends Controller
         }
 
         $pdo = Database::connection();
+        Auth::deleteExpiredSessions($pdo);
         Auth::ensureStaffProfileColumn($pdo);
         $statement = $pdo->prepare(
             'SELECT 
@@ -58,9 +59,12 @@ final class AuthController extends Controller
 
         $token = bin2hex(random_bytes(32));
 
+        $deleteExistingSessions = $pdo->prepare('DELETE FROM sessions WHERE user_id = :user_id');
+        $deleteExistingSessions->execute(['user_id' => $user['id']]);
+
         $insert = $pdo->prepare(
-            'INSERT INTO sessions (session_id, user_id, ip_address, user_agent)
-             VALUES (:session_id, :user_id, :ip_address, :user_agent)'
+            'INSERT INTO sessions (session_id, user_id, ip_address, user_agent, created_at, last_activity)
+             VALUES (:session_id, :user_id, :ip_address, :user_agent, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)'
         );
         $insert->execute([
             'session_id' => $token,

@@ -100,6 +100,7 @@ export const api = {
   billing: (token, branch = '') => request(withBranchQuery('/billing', branch), { token }),
   createBillingPayment: (token, body) => request('/billing/payments', { method: 'POST', token, body }),
   createFrontdeskBill: (token, body) => request('/billing/frontdesk-bill', { method: 'POST', token, body }),
+  createOrthodonticBill: (token, body) => request('/billing/orthodontic-bill', { method: 'POST', token, body }),
   deleteBilling: (token, body) => request('/billing/delete', { method: 'POST', token, body }),
   receipt: (token, receiptNumber) => request(`/billing/receipt?receipt_number=${encodeURIComponent(receiptNumber)}`, { token }),
   customerService: (token) => request('/customer-service', { token }),

@@ -83,7 +83,8 @@ export function ReceptionistDashboard({
   const paymentMix = [
     { label: 'Cash', value: formatCurrency(Number(paymentBreakdown.cash ?? 0)), note: 'Front-desk collections today' },
     { label: 'Mobile Money', value: formatCurrency(Number(paymentBreakdown.mobile_money ?? 0)), note: 'Fast checkout lane' },
-    { label: 'Card / Paystack', value: formatCurrency(Number(paymentBreakdown.card ?? 0)), note: 'Digital authorisations' },
+    { label: 'Card / Paystack', value: formatCurrency(Number(paymentBreakdown.paystack ?? 0)), note: 'Digital authorisations' },
+    { label: 'eDental Store', value: formatCurrency(Number(paymentBreakdown.store_sales ?? 0)), note: 'Over-the-counter store turnover' },
     { label: 'Insurance', value: formatCurrency(Number(paymentBreakdown.insurance ?? 0)), note: 'Claims and cover notes' },
   ];
 
@@ -113,7 +114,7 @@ export function ReceptionistDashboard({
     {
       label: 'Sales',
       value: formatCurrency(salesTotal),
-      trend: 'Cash, MoMo, card, and insurance today',
+      trend: 'Cash, MoMo, card, store, and insurance today',
     },
   ];
 

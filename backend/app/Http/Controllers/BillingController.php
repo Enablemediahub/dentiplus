@@ -134,6 +134,110 @@ final class BillingController extends Controller
         ]);
     }
 
+    public function storeOrthodonticBill(): void
+    {
+        $user = $this->authUser();
+        $role = $this->normalizedRole($user);
+        $staffId = isset($user['staff_id']) ? (int) $user['staff_id'] : 0;
+        $branch = trim((string) ($user['branch'] ?? ''));
+        $payload = Request::json();
+        $pdo = Database::connection();
+
+        $this->ensureSchema($pdo);
+
+        if (!in_array($role, ['receptionist', 'admin'], true)) {
+            Response::json(['message' => 'Only reception or admin can add orthodontic tracker bills.'], 403);
+        }
+
+        $patientId = isset($payload['patient_id']) ? (int) $payload['patient_id'] : 0;
+        $procedureName = $this->normalizeOrthodonticProcedureName((string) ($payload['procedure_name'] ?? ''));
+        $amount = round((float) ($payload['amount'] ?? 0), 2);
+        $notes = trim((string) ($payload['notes'] ?? ''));
+
+        if ($patientId <= 0) {
+            Response::json(['message' => 'Select a patient before adding an orthodontic tracker bill.'], 422);
+        }
+
+        if ($procedureName === '') {
+            Response::json(['message' => 'Choose traditional braces or Invisalign for this tracker bill.'], 422);
+        }
+
+        if ($amount <= 0) {
+            Response::json(['message' => 'Enter the total orthodontic bill amount before saving.'], 422);
+        }
+
+        $patient = $this->patientById($pdo, $patientId);
+        if (!$patient) {
+            Response::json(['message' => 'The selected patient could not be found.'], 404);
+        }
+
+        $patientName = $this->patientDisplayName($patient);
+        $procedure = $this->procedureByName($pdo, $procedureName);
+        $procedureId = $procedure ? (int) ($procedure['id'] ?? 0) : null;
+        $lineItem = [
+            'procedure_id' => $procedureId ?? 0,
+            'name' => $procedureName,
+            'amount' => $amount,
+            'min_charge' => $procedure ? (float) ($procedure['min_charge'] ?? 0) : 0,
+            'max_charge' => $procedure ? (float) ($procedure['max_charge'] ?? 0) : 0,
+            'topup_notes' => '',
+        ];
+
+        $statement = $pdo->prepare(
+            'INSERT INTO billing_records (
+                patient_id,
+                dentist_id,
+                dentist_name,
+                patient_name,
+                procedure_id,
+                procedures_data,
+                amount,
+                remaining_amount,
+                status,
+                created_at,
+                notes,
+                bill_type,
+                branch
+            ) VALUES (
+                :patient_id,
+                NULL,
+                :dentist_name,
+                :patient_name,
+                :procedure_id,
+                :procedures_data,
+                :amount,
+                :remaining_amount,
+                :status,
+                CURRENT_TIMESTAMP,
+                :notes,
+                :bill_type,
+                :branch
+            )'
+        );
+        $statement->execute([
+            'patient_id' => $patientId,
+            'dentist_name' => 'Reception desk',
+            'patient_name' => $patientName,
+            'procedure_id' => $procedureId,
+            'procedures_data' => json_encode([$lineItem], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'amount' => $amount,
+            'remaining_amount' => $amount,
+            'status' => 'pending',
+            'notes' => $notes !== '' ? 'Orthodontic tracker: ' . $notes : 'Orthodontic tracker manual bill',
+            'bill_type' => 'procedure_charge',
+            'branch' => $branch !== '' ? $branch : null,
+        ]);
+
+        $billingId = (int) $pdo->lastInsertId();
+
+        Response::json([
+            'message' => 'Orthodontic tracker bill added successfully.',
+            'bill' => $this->billingItemById($pdo, $billingId, $role, $staffId, $branch),
+            'items' => $this->openBills($pdo, $role, $staffId, $branch),
+            'history' => $this->paymentHistory($pdo, $role, $staffId, $branch),
+        ]);
+    }
+
     public function storePayment(): void
     {
         $user = $this->authUser();
@@ -558,6 +662,7 @@ final class BillingController extends Controller
                 p.amount AS payment_amount,
                 p.payment_method,
                 p.transaction_id,
+                COALESCE(NULLIF(TRIM(CONCAT_WS(' ', sr.first_name, sr.other_names, sr.last_name)), ''), ur.username, 'Reception desk') AS receptionist_name,
                 br.*,
                 pt.first_name,
                 pt.last_name,
@@ -567,6 +672,8 @@ final class BillingController extends Controller
             INNER JOIN payments p ON p.id = r.payment_id
             INNER JOIN billing_records br ON br.id = r.billing_id
             LEFT JOIN patients pt ON pt.id = br.patient_id
+            LEFT JOIN staff sr ON sr.id = p.receptionist_id
+            LEFT JOIN users ur ON ur.id = sr.user_id
             WHERE p.payment_method <> 'insurance'";
 
         $params = [];
@@ -599,6 +706,7 @@ final class BillingController extends Controller
                 $bill = $this->mapBillingRow($pdo, $row);
                 $grouped[$receiptNumber] = [
                     'receiptNumber' => $receiptNumber,
+                    'billingId' => (int) ($row['id'] ?? 0),
                     'bill' => $bill['bill'],
                     'patientName' => $bill['patientName'],
                     'dentistName' => $bill['dentistName'],
@@ -608,9 +716,11 @@ final class BillingController extends Controller
                     'paidAmountLabel' => '',
                     'paymentMethod' => '',
                     'methods' => [],
+                    'paymentLines' => [],
                     'transactionIds' => [],
                     'paymentDate' => (string) ($row['receipt_created_at'] ?? ''),
                     'dateLabel' => !empty($row['receipt_created_at']) ? date('d M Y', strtotime((string) $row['receipt_created_at'])) : '',
+                    'receptionistName' => (string) ($row['receptionist_name'] ?? 'Reception desk'),
                     'status' => ucfirst(str_replace('_', ' ', (string) ($row['status'] ?? 'completed'))),
                     'remainingAmountLabel' => 'GHS ' . number_format((float) ($row['remaining_amount'] ?? 0), 2),
                     'totalAmountLabel' => 'GHS ' . number_format((float) ($row['amount'] ?? 0), 2),
@@ -619,11 +729,19 @@ final class BillingController extends Controller
 
             $grouped[$receiptNumber]['paidAmount'] += (float) ($row['payment_amount'] ?? 0);
             $methodLabel = ucwords(str_replace('_', ' ', (string) ($row['payment_method'] ?? 'cash')));
+            $transactionId = trim((string) ($row['transaction_id'] ?? ''));
+            $paymentAmount = (float) ($row['payment_amount'] ?? 0);
+            $grouped[$receiptNumber]['paymentLines'][] = [
+                'method' => $methodLabel,
+                'amount' => $paymentAmount,
+                'amountLabel' => 'GHS ' . number_format($paymentAmount, 2),
+                'transactionId' => $transactionId,
+            ];
+
             if (!in_array($methodLabel, $grouped[$receiptNumber]['methods'], true)) {
                 $grouped[$receiptNumber]['methods'][] = $methodLabel;
             }
 
-            $transactionId = trim((string) ($row['transaction_id'] ?? ''));
             if ($transactionId !== '' && !in_array($transactionId, $grouped[$receiptNumber]['transactionIds'], true)) {
                 $grouped[$receiptNumber]['transactionIds'][] = $transactionId;
             }
@@ -1004,6 +1122,35 @@ final class BillingController extends Controller
 
         $decoded = json_decode($value, true);
         return is_array($decoded) ? $decoded : [];
+    }
+
+    private function normalizeOrthodonticProcedureName(string $value): string
+    {
+        $normalized = strtolower(preg_replace('/\s+/', ' ', trim($value)) ?? '');
+
+        if (str_contains($normalized, 'invisalign')) {
+            return 'Orthodontic treatment ( Invisalign)';
+        }
+
+        if (str_contains($normalized, 'traditional braces') || str_contains($normalized, 'braces')) {
+            return 'Orthodontic treatment ( traditional braces)';
+        }
+
+        return '';
+    }
+
+    private function procedureByName(PDO $pdo, string $name): ?array
+    {
+        $statement = $pdo->prepare(
+            'SELECT id, name, min_charge, max_charge
+             FROM procedures
+             WHERE LOWER(TRIM(name)) = LOWER(TRIM(:name))
+             LIMIT 1'
+        );
+        $statement->execute(['name' => $name]);
+        $procedure = $statement->fetch(PDO::FETCH_ASSOC);
+
+        return $procedure ?: null;
     }
 
     private function patientById(PDO $pdo, int $patientId): ?array

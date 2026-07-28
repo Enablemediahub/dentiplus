@@ -40,7 +40,7 @@ final class DashboardController extends Controller
                 ['label' => 'Today Appointments', 'value' => (string) $todayAppointments, 'trend' => 'Live from appointments', 'icon' => 'calendar'],
                 ['label' => 'Waiting Queue', 'value' => (string) $activeAssignments, 'trend' => 'Active patient assignments', 'icon' => 'clock'],
                 ['label' => 'Expenses Today', 'value' => 'GHS ' . number_format($expenses, 2), 'trend' => 'From today\'s expense records', 'icon' => 'finance'],
-                ['label' => 'Sales Today', 'value' => 'GHS ' . number_format($todayRevenue, 2), 'trend' => 'From today\'s payments table', 'icon' => 'receipt'],
+                ['label' => 'Sales Today', 'value' => 'GHS ' . number_format($todayRevenue, 2), 'trend' => 'Payments and eDental store sales today', 'icon' => 'receipt'],
             ],
             'dentist' => [
                 ['label' => 'Today Appointments', 'value' => (string) $todayAppointments, 'trend' => 'Current dentist schedule', 'icon' => 'calendar'],
@@ -55,7 +55,7 @@ final class DashboardController extends Controller
                 ['label' => 'Insurance Claims', 'value' => 'GHS ' . number_format($claims, 2), 'trend' => 'Current insurance ledger', 'icon' => 'shield'],
             ],
             default => [
-                ['label' => 'Sales Today', 'value' => 'GHS ' . number_format($todayRevenue, 2), 'trend' => 'Cash, MoMo, Paystack, and bank sales', 'icon' => 'trend'],
+                ['label' => 'Sales Today', 'value' => 'GHS ' . number_format($todayRevenue, 2), 'trend' => 'Cash, MoMo, Paystack, bank, and store sales', 'icon' => 'trend'],
                 ['label' => 'Expenses Today', 'value' => 'GHS ' . number_format($expenses, 2), 'trend' => 'Operational spending logged today', 'icon' => 'finance'],
                 ['label' => 'Sales + Insurance', 'value' => 'GHS ' . number_format($salesPlusInsurance, 2), 'trend' => 'Sales plus insurance captured today', 'icon' => 'shield'],
                 ['label' => 'Patients Today', 'value' => (string) $todayPatients, 'trend' => 'Unique patients on today\'s schedule', 'icon' => 'patients'],
@@ -356,6 +356,11 @@ final class DashboardController extends Controller
             WHERE DATE(payment_date) = CURDATE()
               AND payment_method <> 'insurance'";
 
+        $storeSql = "
+            SELECT COALESCE(SUM(total_amount), 0) AS store_total
+            FROM store_sales
+            WHERE DATE(created_at) = CURDATE()";
+
         if ($role === 'receptionist' && $staffId > 0 && $branch !== '') {
             $statement = $pdo->prepare(
                 "SELECT
@@ -371,6 +376,18 @@ final class DashboardController extends Controller
                    AND p.payment_method <> 'insurance'"
             );
             $statement->execute([
+                'staff_id' => $staffId,
+                'branch' => $branch,
+            ]);
+
+            $storeStatement = $pdo->prepare(
+                "SELECT COALESCE(SUM(total_amount), 0)
+                 FROM store_sales
+                 WHERE receptionist_id = :staff_id
+                   AND branch = :branch
+                   AND DATE(created_at) = CURDATE()"
+            );
+            $storeStatement->execute([
                 'staff_id' => $staffId,
                 'branch' => $branch,
             ]);
@@ -391,23 +408,37 @@ final class DashboardController extends Controller
             $statement->execute([
                 'branch' => $branch,
             ]);
+
+            $storeStatement = $pdo->prepare(
+                "SELECT COALESCE(SUM(total_amount), 0)
+                 FROM store_sales
+                 WHERE branch = :branch
+                   AND DATE(created_at) = CURDATE()"
+            );
+            $storeStatement->execute([
+                'branch' => $branch,
+            ]);
         } else {
             $statement = $pdo->query($sql);
+            $storeStatement = $pdo->query($storeSql);
         }
 
         $row = $statement->fetch(PDO::FETCH_ASSOC) ?: [];
+        $storeRow = $storeStatement->fetch(PDO::FETCH_ASSOC);
         $cash = (float) ($row['cash_total'] ?? 0);
         $mobileMoney = (float) ($row['momo_total'] ?? 0);
         $paystack = (float) ($row['paystack_total'] ?? 0);
         $bank = (float) ($row['bank_total'] ?? 0);
+        $storeSales = (float) ($storeRow ? array_values($storeRow)[0] : 0);
 
         return [
-            'sales_total' => $cash + $mobileMoney + $paystack + $bank,
+            'sales_total' => $cash + $mobileMoney + $paystack + $bank + $storeSales,
             'payment_breakdown' => [
                 'cash' => $cash,
                 'mobile_money' => $mobileMoney,
                 'paystack' => $paystack,
                 'bank' => $bank,
+                'store_sales' => $storeSales,
             ],
         ];
     }

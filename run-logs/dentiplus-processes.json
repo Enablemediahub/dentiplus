@@ -1,7 +1,7 @@
 {
-    "startedAt":  "2026-06-05T08:54:52",
-    "frontendPid":  20284,
-    "backendPid":  1668,
+    "startedAt":  "2026-07-27T11:57:43",
+    "frontendPid":  2672,
+    "backendPid":  7744,
     "frontendUrl":  "http://localhost:5176",
     "backendUrl":  "http://127.0.0.1:8000/api/v1",
     "logs":  {

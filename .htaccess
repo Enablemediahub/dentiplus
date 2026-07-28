@@ -1,10 +1,37 @@
-DirectoryIndex public_html/index.html public_html/index.php index.php
+DirectoryIndex public_html/index.html public_html/index.php frontend/dist/index.html index.php
 
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
+    # Keep the Hostinger package flow working when public_html exists.
+    RewriteCond %{DOCUMENT_ROOT}/public_html/index.php -f [OR]
+    RewriteCond %{DOCUMENT_ROOT}/public_html/index.html -f
+    RewriteRule ^ - [E=USE_PUBLIC_HTML:1]
+
+    RewriteCond %{ENV:USE_PUBLIC_HTML} =1
     RewriteCond %{REQUEST_URI} !^/public_html/
-    RewriteCond %{REQUEST_FILENAME} !-f
-    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^$ public_html/index.html [L]
+
+    RewriteCond %{ENV:USE_PUBLIC_HTML} =1
+    RewriteCond %{REQUEST_URI} !^/public_html/
     RewriteRule ^(.*)$ public_html/$1 [L]
+
+    # Local checkout flow: serve the compiled frontend and send API calls to the PHP backend.
+    RewriteCond %{REQUEST_URI} ^/api/v1/ [NC]
+    RewriteCond %{REQUEST_URI} !^/backend/
+    RewriteRule ^api/v1/(.*)$ backend/public/index.php [L,QSA]
+
+    RewriteCond %{REQUEST_URI} !^/frontend/dist/
+    RewriteCond %{DOCUMENT_ROOT}/frontend/dist%{REQUEST_URI} -f
+    RewriteRule ^(.*)$ frontend/dist/$1 [L]
+
+    RewriteCond %{REQUEST_URI} !^/frontend/dist/
+    RewriteCond %{DOCUMENT_ROOT}/frontend/dist%{REQUEST_URI} -d
+    RewriteRule ^(.*)$ frontend/dist/$1 [L]
+
+    RewriteCond %{REQUEST_URI} !^/frontend/dist/
+    RewriteRule ^$ frontend/dist/index.html [L]
+
+    RewriteCond %{REQUEST_URI} !^/frontend/dist/
+    RewriteRule ^(.*)$ frontend/dist/index.html [L]
 </IfModule>

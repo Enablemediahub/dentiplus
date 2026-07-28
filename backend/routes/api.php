@@ -51,6 +51,7 @@ return [
         '/api/v1/appointments' => [AppointmentController::class, 'store'],
         '/api/v1/billing/payments' => [BillingController::class, 'storePayment'],
         '/api/v1/billing/frontdesk-bill' => [BillingController::class, 'storeFrontdeskBill'],
+        '/api/v1/billing/orthodontic-bill' => [BillingController::class, 'storeOrthodonticBill'],
         '/api/v1/billing/delete' => [BillingController::class, 'delete'],
         '/api/v1/customer-service/templates' => [CustomerServiceController::class, 'storeTemplate'],
         '/api/v1/customer-service/templates/update' => [CustomerServiceController::class, 'updateTemplate'],

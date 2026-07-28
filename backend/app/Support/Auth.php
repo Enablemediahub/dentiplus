@@ -9,6 +9,9 @@ use App\Support\Env;
 
 final class Auth
 {
+    private const SESSION_IDLE_TIMEOUT_SECONDS = 1800;
+    private const SESSION_MAX_AGE_SECONDS = 43200;
+
     public static function ensureStaffProfileColumn(PDO $pdo): void
     {
         $columns = $pdo->query('SHOW COLUMNS FROM staff')->fetchAll(PDO::FETCH_COLUMN) ?: [];
@@ -43,6 +46,7 @@ final class Auth
         }
 
         $pdo = Database::connection();
+        self::deleteExpiredSessions($pdo);
         self::ensureStaffProfileColumn($pdo);
         $statement = $pdo->prepare(
             'SELECT 
@@ -58,7 +62,12 @@ final class Auth
                 s.profile_image,
                 s.role AS staff_role,
                 sb.branch,
-                sessions.last_activity
+                sessions.user_agent AS session_user_agent,
+                sessions.created_at,
+                sessions.last_activity,
+                UNIX_TIMESTAMP(sessions.created_at) AS created_at_ts,
+                UNIX_TIMESTAMP(sessions.last_activity) AS last_activity_ts,
+                UNIX_TIMESTAMP(CURRENT_TIMESTAMP) AS current_ts
              FROM sessions
              INNER JOIN users u ON u.id = sessions.user_id
              LEFT JOIN staff s ON s.user_id = u.id
@@ -71,6 +80,29 @@ final class Auth
 
         if (!$user || (int) ($user['is_active'] ?? 0) !== 1) {
             Response::json(['message' => 'Your session is no longer active.'], 401);
+        }
+
+        $storedUserAgent = trim((string) ($user['session_user_agent'] ?? ''));
+        $currentUserAgent = trim(Request::userAgent());
+        if ($storedUserAgent !== '' && $currentUserAgent !== '' && !hash_equals($storedUserAgent, $currentUserAgent)) {
+            $delete = $pdo->prepare('DELETE FROM sessions WHERE session_id = :token');
+            $delete->execute(['token' => $token]);
+            Response::json(['message' => 'Your session could not be verified. Please sign in again.'], 401);
+        }
+
+        $currentTime = (int) ($user['current_ts'] ?? time());
+        $lastActivity = (int) ($user['last_activity_ts'] ?? 0);
+        if ($lastActivity <= 0 || $currentTime - $lastActivity > self::SESSION_IDLE_TIMEOUT_SECONDS) {
+            $delete = $pdo->prepare('DELETE FROM sessions WHERE session_id = :token');
+            $delete->execute(['token' => $token]);
+            Response::json(['message' => 'Your session expired after inactivity. Please sign in again.'], 401);
+        }
+
+        $createdAt = (int) ($user['created_at_ts'] ?? 0);
+        if ($createdAt > 0 && $currentTime - $createdAt > self::SESSION_MAX_AGE_SECONDS) {
+            $delete = $pdo->prepare('DELETE FROM sessions WHERE session_id = :token');
+            $delete->execute(['token' => $token]);
+            Response::json(['message' => 'Your session expired. Please sign in again.'], 401);
         }
 
         $touch = $pdo->prepare('UPDATE sessions SET last_activity = CURRENT_TIMESTAMP WHERE session_id = :token');
@@ -110,5 +142,15 @@ final class Auth
     public static function displayName(array $user): string
     {
         return self::staffDisplayName($user);
+    }
+
+    public static function deleteExpiredSessions(PDO $pdo): void
+    {
+        $statement = $pdo->prepare(
+            'DELETE FROM sessions
+             WHERE last_activity < DATE_SUB(CURRENT_TIMESTAMP, INTERVAL ' . self::SESSION_IDLE_TIMEOUT_SECONDS . ' SECOND)
+                OR created_at < DATE_SUB(CURRENT_TIMESTAMP, INTERVAL ' . self::SESSION_MAX_AGE_SECONDS . ' SECOND)'
+        );
+        $statement->execute();
     }
 }

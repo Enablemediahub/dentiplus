@@ -41,6 +41,26 @@ import { AdminDeletionAuditPage } from './components/AdminDeletionAuditPage';
 
 const THEME_KEY = 'edental-theme';
 const ADMIN_BRANCH_FILTER_KEY = 'dentiplus-admin-dashboard-branch';
+const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+
+function getSessionToken() {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  localStorage.removeItem(TOKEN_KEY);
+  return sessionStorage.getItem(TOKEN_KEY) ?? '';
+}
+
+function storeSessionToken(token) {
+  sessionStorage.setItem(TOKEN_KEY, token);
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+function clearSessionToken() {
+  sessionStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(TOKEN_KEY);
+}
 
 function getInitialViewFromHash() {
   const hashValue = String(window.location.hash || '').replace(/^#\/?/, '').trim();
@@ -56,7 +76,7 @@ function getInitialViewFromHash() {
 
 function useDentiplusPortal() {
   const [bootState, setBootState] = useState('restoring');
-  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) ?? '');
+  const [token, setToken] = useState(() => getSessionToken());
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
   const [portalData, setPortalData] = useState(null);
@@ -285,7 +305,7 @@ function useDentiplusPortal() {
         setCurrentView(getInitialViewFromHash());
         setBootState('ready');
       } catch (error) {
-        localStorage.removeItem(TOKEN_KEY);
+        clearSessionToken();
         if (active) {
           setPortalData(null);
           setAssignmentsData(null);
@@ -389,7 +409,7 @@ function useDentiplusPortal() {
 
     try {
       const response = await api.login(credentials);
-      localStorage.setItem(TOKEN_KEY, response.token);
+      storeSessionToken(response.token);
       setToken(response.token);
       setBootState('restoring');
     } catch (error) {
@@ -407,7 +427,7 @@ function useDentiplusPortal() {
     } catch (error) {
       // We still clear local state even if the server session is already gone.
     } finally {
-      localStorage.removeItem(TOKEN_KEY);
+      clearSessionToken();
       setPortalData(null);
       setAssignmentsData(null);
       setProcedureChargesData(null);
@@ -416,6 +436,38 @@ function useDentiplusPortal() {
       setMobileOpen(false);
     }
   }
+
+  useEffect(() => {
+    if (bootState !== 'ready' || !token) {
+      return undefined;
+    }
+
+    let timeoutId = 0;
+    const expireForInactivity = () => {
+      setLoginError('You were signed out after inactivity. Please sign in again.');
+      handleLogout();
+    };
+    const resetTimer = () => {
+      window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(expireForInactivity, SESSION_IDLE_TIMEOUT_MS);
+    };
+    const handleActivity = () => {
+      if (document.visibilityState === 'hidden') {
+        return;
+      }
+
+      resetTimer();
+    };
+    const events = ['click', 'keydown', 'mousemove', 'scroll', 'touchstart', 'visibilitychange'];
+
+    resetTimer();
+    events.forEach((eventName) => window.addEventListener(eventName, handleActivity));
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      events.forEach((eventName) => window.removeEventListener(eventName, handleActivity));
+    };
+  }, [bootState, token]);
 
   async function handleSaveSettings(values) {
     if (!token) {
@@ -600,6 +652,17 @@ function useDentiplusPortal() {
     }
 
     const response = await api.createFrontdeskBill(token, values);
+    await refreshReceptionWorkspace(token);
+
+    return response;
+  }
+
+  async function handleCreateOrthodonticBill(values) {
+    if (!token) {
+      throw new Error('Sign in again before creating an orthodontic tracker bill.');
+    }
+
+    const response = await api.createOrthodonticBill(token, values);
     await refreshReceptionWorkspace(token);
 
     return response;
@@ -1006,6 +1069,7 @@ function useDentiplusPortal() {
     handleDeleteProcedureCatalog,
     handleCreateBillingPayment,
     handleCreateFrontdeskBill,
+    handleCreateOrthodonticBill,
     handleDeleteBilling,
     handleLoadMedicalRecords,
     handleLoadPrescriptions,
@@ -1066,6 +1130,7 @@ function AppWorkspace({
   onDeleteProcedureCatalog,
   onCreateBillingPayment,
   onCreateFrontdeskBill,
+  onCreateOrthodonticBill,
   onDeleteBilling,
   onLoadMedicalRecords,
   onLoadPrescriptions,
@@ -1406,7 +1471,9 @@ function AppWorkspace({
       role === 'receptionist' ? (
         <ReceptionProcedureBillsPage
           billing={portalData?.billing}
+          onCreateOrthodonticBill={onCreateOrthodonticBill}
           onCreateBillingPayment={onCreateBillingPayment}
+          patients={portalData?.patients}
         />
       ) : (
         <FormPanel
@@ -1869,6 +1936,7 @@ export default function App() {
     handleCreateAppointment,
     handleCreateBillingPayment,
     handleCreateFrontdeskBill,
+    handleCreateOrthodonticBill,
     handleDeleteBilling,
     handleCreateProcedureCharge,
     handleUpdateProcedureChargeBilling,
@@ -1957,6 +2025,7 @@ export default function App() {
       onCreateAppointment={handleCreateAppointment}
       onCreateBillingPayment={handleCreateBillingPayment}
       onCreateFrontdeskBill={handleCreateFrontdeskBill}
+      onCreateOrthodonticBill={handleCreateOrthodonticBill}
       onDeleteBilling={handleDeleteBilling}
       onCreateMedicalRecord={handleCreateMedicalRecord}
       onUpdateMedicalRecord={handleUpdateMedicalRecord}
