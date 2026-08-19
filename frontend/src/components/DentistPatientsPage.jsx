@@ -337,6 +337,7 @@ function ClinicalWorkspaceModal({
   activeTab,
   clinicalSuggestions,
   feedback,
+  feedbackType,
   loadingMedical,
   loadingPrescription,
   medicalRecords,
@@ -446,8 +447,8 @@ function ClinicalWorkspaceModal({
                       ['History', record.historyPresentingComplaint],
                       ['Findings', record.examinationFindings],
                       ['Diagnosis', record.diagnosis],
-                      ['Treatment done', record.treatmentDone],
                       ['Treatment plan', record.treatmentPlan],
+                      ['Treatment done', record.treatmentDone],
                       ['Investigations', record.investigations],
                       ['Notes', record.notes],
                     ]
@@ -479,7 +480,7 @@ function ClinicalWorkspaceModal({
                 </label>
                 <label className="field-block field-block--wide">
                   <span>History of presenting complaint</span>
-                  <textarea name="history_presenting_complaint" onChange={onChangeMedicalForm} placeholder="Summarize the complaint history, duration, and progression" required rows={3} value={medicalForm.history_presenting_complaint} />
+                  <textarea name="history_presenting_complaint" onChange={onChangeMedicalForm} placeholder="Summarize the complaint history, duration, and progression" rows={3} value={medicalForm.history_presenting_complaint} />
                 </label>
                 <label className="field-block field-block--wide">
                   <span>Examination findings</span>
@@ -493,13 +494,13 @@ function ClinicalWorkspaceModal({
                   <span>Diagnosis</span>
                   <textarea name="diagnosis" onChange={onChangeMedicalForm} placeholder="Enter diagnosis (e.g., Dental Caries in Molar 30, Periodontitis Stage II)" required rows={3} value={medicalForm.diagnosis} />
                 </label>
-                <label className="field-block">
-                  <span>Treatment</span>
-                  <textarea name="treatment_done" onChange={onChangeMedicalForm} placeholder="Enter treatment details (e.g., Amalgam Restoration on Molar 30, Scaling and Root Planing (SRP))" required rows={3} value={medicalForm.treatment_done} />
-                </label>
                 <label className="field-block field-block--wide">
                   <span>Treatment plan</span>
-                  <textarea name="treatment_plan" onChange={onChangeMedicalForm} placeholder="Enter treatment plan or follow-up care guidance" required rows={3} value={medicalForm.treatment_plan} />
+                  <textarea name="treatment_plan" onChange={onChangeMedicalForm} placeholder="Enter treatment plan or follow-up care guidance" rows={3} value={medicalForm.treatment_plan} />
+                </label>
+                <label className="field-block">
+                  <span>Treatment done</span>
+                  <textarea name="treatment_done" onChange={onChangeMedicalForm} placeholder="Enter treatment details (e.g., Amalgam Restoration on Molar 30, Scaling and Root Planing (SRP))" required rows={3} value={medicalForm.treatment_done} />
                 </label>
                 <label className="field-block field-block--wide">
                   <span>Medical history (Existing History - Read-only for reference)</span>
@@ -1137,6 +1138,7 @@ export function DentistPatientsPage({
         editingMedicalId={editingMedicalId}
           editingPrescriptionId={editingPrescriptionId}
           feedback={feedback}
+          feedbackType={feedbackType}
           loadingMedical={loadingMedical}
           loadingPrescription={loadingPrescription}
           medicalForm={medicalForm}

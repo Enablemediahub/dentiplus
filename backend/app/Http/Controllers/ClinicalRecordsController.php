@@ -62,13 +62,11 @@ final class ClinicalRecordsController extends Controller
             $patientId <= 0
             || $visitDate === ''
             || $presentingComplaint === ''
-            || $historyPresentingComplaint === ''
             || $examinationFindings === ''
             || $diagnosis === ''
             || $treatmentDone === ''
-            || $treatmentPlan === ''
         ) {
-            Response::json(['message' => 'Patient, visit date, complaint, findings, diagnosis, treatment done, and treatment plan are required.'], 422);
+            Response::json(['message' => 'Patient, visit date, complaint, examination findings, diagnosis, and treatment done are required.'], 422);
         }
 
         $patient = $this->patientById($pdo, $patientId);
@@ -169,13 +167,11 @@ final class ClinicalRecordsController extends Controller
             || $patientId <= 0
             || $visitDate === ''
             || $presentingComplaint === ''
-            || $historyPresentingComplaint === ''
             || $examinationFindings === ''
             || $diagnosis === ''
             || $treatmentDone === ''
-            || $treatmentPlan === ''
         ) {
-            Response::json(['message' => 'Record, patient, visit date, complaint, findings, diagnosis, treatment done, and treatment plan are required.'], 422);
+            Response::json(['message' => 'Record, patient, visit date, complaint, examination findings, diagnosis, and treatment done are required.'], 422);
         }
 
         $existing = $this->medicalRecordById($pdo, $recordId);
