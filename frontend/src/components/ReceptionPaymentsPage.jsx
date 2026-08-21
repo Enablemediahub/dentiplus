@@ -10,6 +10,25 @@ function formatCurrency(value) {
   })}`;
 }
 
+const DEFAULT_INSURANCE_NAMES = [
+  'Cosmopolitan Health Insurance',
+  'Equity Health Insurance',
+  'Glico',
+  'Premier Health Insurance',
+  'Acacia',
+  'Metropolitan',
+  'ACE Health Insurance',
+  'GAB Insurance',
+];
+
+function normalizeInsuranceNameOption(item) {
+  if (typeof item === 'string') {
+    return item.trim();
+  }
+
+  return String(item?.name ?? '').trim();
+}
+
 function getReceiptDentistLabel(receipt) {
   const rawName = String(receipt?.bill?.dentistName ?? '').trim();
   if (!rawName || rawName.toLowerCase() === 'reception desk') {
@@ -740,7 +759,7 @@ function ReceiptHistoryModal({ history, isOpen, onClose, onReprint, receiptLoadi
   );
 }
 
-export function PaymentProcessingModal({ bill, isOpen, onClose, onSubmit, onPaymentSaved }) {
+export function PaymentProcessingModal({ bill, insuranceCatalog = [], isOpen, onClose, onSubmit, onPaymentSaved }) {
   const [payments, setPayments] = React.useState([{ method: 'cash', amount: '', transaction_id: '' }]);
   const [insurance, setInsurance] = React.useState({
     insurance_type: '',
@@ -754,6 +773,9 @@ export function PaymentProcessingModal({ bill, isOpen, onClose, onSubmit, onPaym
   const [feedback, setFeedback] = React.useState('');
 
   const billBalance = Number(bill?.balance ?? 0);
+  const insuranceTypeOptions = (insuranceCatalog.length > 0 ? insuranceCatalog : DEFAULT_INSURANCE_NAMES)
+    .map(normalizeInsuranceNameOption)
+    .filter(Boolean);
 
   React.useEffect(() => {
     if (!isOpen || !bill) {
@@ -999,14 +1021,11 @@ export function PaymentProcessingModal({ bill, isOpen, onClose, onSubmit, onPaym
                       <span>Insurance type</span>
                       <select onChange={(event) => setInsurance((current) => ({ ...current, insurance_type: event.target.value }))} value={insurance.insurance_type}>
                         <option value="">Choose insurance type</option>
-                        <option value="Cosmopolitan Health Insurance">Cosmopolitan Health Insurance</option>
-                        <option value="Equity Health Insurance">Equity Health Insurance</option>
-                        <option value="Glico">Glico</option>
-                        <option value="Premier Health Insurance">Premier Health Insurance</option>
-                        <option value="Acacia">Acacia</option>
-                        <option value="Metropolitan">Metropolitan</option>
-                        <option value="ACE Health Insurance">ACE Health Insurance</option>
-                        <option value="GAB Insurance">GAB Insurance</option>
+                        {insuranceTypeOptions.map((name) => (
+                          <option key={name} value={name}>
+                            {name}
+                          </option>
+                        ))}
                       </select>
                     </label>
                     <label className="field-block">
@@ -1592,6 +1611,7 @@ export function ReceptionPaymentsPage({
 
       <PaymentProcessingModal
         bill={selectedBill}
+        insuranceCatalog={insurance?.catalog ?? []}
         isOpen={Boolean(selectedBill)}
         onClose={() => setSelectedBill(null)}
         onPaymentSaved={(receipt, message = '') => {

@@ -1,8 +1,20 @@
-Re-optimizing dependencies because lockfile has changed
 
-  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m1757[22m[2m[0m ms[22m
+  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m5744[22m[2m[0m ms[22m
 
   [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5176[22m/[39m
   [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.100.13:[1m5176[22m/[39m
 [2m[32m  ➜[39m[22m[2m  press [22m[1mh + enter[22m[2m to show help[22m
-[2m10:56:47 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/DentistPatientsPage.jsx[22m
+[2m9:40:24 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/lib/api.js[22m
+[2m9:41:03 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionInsurancePage.jsx[22m
+[2m9:41:27 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
+[2m9:41:34 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/App.jsx[22m
+[2m9:46:48 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/App.jsx[22m
+[2m9:50:28 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionInsurancePage.jsx[22m
+[2m9:50:35 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/App.jsx[22m
+[2m9:54:50 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/App.jsx[22m
+[2m10:07:31 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
+[2m10:07:31 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionPaymentsPage.jsx[22m
+[2m10:11:39 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/lib/api.js[22m
+[2m10:12:03 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/ReceptionInsurancePage.jsx[22m
+[2m10:12:11 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/App.jsx[22m
+[2m10:14:26 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/App.jsx[22m

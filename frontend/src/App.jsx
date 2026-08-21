@@ -835,6 +835,39 @@ function useDentiplusPortal() {
     return response;
   }
 
+  async function handleCreateInsuranceName(values) {
+    if (!token) {
+      throw new Error('Sign in again before adding an insurance name.');
+    }
+
+    const response = await api.createInsuranceCatalog(token, values);
+    await refreshReceptionWorkspace(token);
+
+    return response;
+  }
+
+  async function handleUpdateInsuranceName(values) {
+    if (!token) {
+      throw new Error('Sign in again before updating an insurance name.');
+    }
+
+    const response = await api.updateInsuranceCatalog(token, values);
+    await refreshReceptionWorkspace(token);
+
+    return response;
+  }
+
+  async function handleDeleteInsuranceName(values) {
+    if (!token) {
+      throw new Error('Sign in again before deleting an insurance name.');
+    }
+
+    const response = await api.deleteInsuranceCatalog(token, values);
+    await refreshReceptionWorkspace(token);
+
+    return response;
+  }
+
   async function handleDeleteInsurance(values) {
     if (!token) {
       throw new Error('Sign in again before deleting insurance.');
@@ -1086,6 +1119,9 @@ function useDentiplusPortal() {
     handleSendCustomerSms,
     handleUpdateFollowUp,
     handleUpdateInsurance,
+    handleCreateInsuranceName,
+    handleUpdateInsuranceName,
+    handleDeleteInsuranceName,
     handleDeleteInsurance,
     handleCreateExpense,
     handleUpdateExpense,
@@ -1143,6 +1179,9 @@ function AppWorkspace({
   onSendCustomerSms,
   onUpdateFollowUp,
   onUpdateInsurance,
+  onCreateInsuranceName,
+  onUpdateInsuranceName,
+  onDeleteInsuranceName,
   onDeleteInsurance,
   onCreateExpense,
   onUpdateExpense,
@@ -1686,41 +1725,14 @@ function AppWorkspace({
       )
     ),
     insurance: (
-      role === 'receptionist' ? (
         <ReceptionInsurancePage
           data={portalData?.insurance}
+          onCreateInsuranceName={onCreateInsuranceName}
+          onUpdateInsuranceName={onUpdateInsuranceName}
+          onDeleteInsuranceName={onDeleteInsuranceName}
           onDeleteInsurance={onDeleteInsurance}
           onUpdateInsurance={onUpdateInsurance}
         />
-      ) : (
-        <div className="workspace-grid workspace-grid--split">
-          <DataTable
-            title="Insurance payment desk"
-            columns={[
-              { key: 'bill', label: 'Bill' },
-              { key: 'patient', label: 'Patient' },
-              { key: 'amount', label: 'Amount' },
-              { key: 'balance', label: 'Balance' },
-              { key: 'status', label: 'Status' },
-            ]}
-            rows={billingRows}
-            actionLabel="Open claim"
-          />
-          <FormPanel
-            title="Insurance claim handoff"
-            description="Mirrors the receptionist insurance handling from ASDental with claim details beside the open bill."
-            fields={[
-              { label: 'Billing reference', placeholder: 'INV-00039' },
-              { label: 'Insurance type', placeholder: 'NHIS, private, corporate...' },
-              { label: 'Company', placeholder: 'Insurance company' },
-              { label: 'Insurance number', placeholder: 'Policy or membership number' },
-              { label: 'Covered amount', placeholder: '0.00', type: 'number' },
-              { label: 'Claim note', placeholder: 'Category, expiry, internal note', type: 'textarea' },
-            ]}
-            actionLabel="Save insurance note"
-          />
-        </div>
-      )
     ),
     expenses: (
       role === 'admin' || role === 'receptionist' ? (
@@ -1953,6 +1965,9 @@ export default function App() {
     handleSendCustomerSms,
     handleUpdateFollowUp,
     handleUpdateInsurance,
+    handleCreateInsuranceName,
+    handleUpdateInsuranceName,
+    handleDeleteInsuranceName,
     handleDeleteInsurance,
     handleCreateExpense,
     handleUpdateExpense,
@@ -2049,6 +2064,9 @@ export default function App() {
       onSendCustomerSms={handleSendCustomerSms}
       onUpdateFollowUp={handleUpdateFollowUp}
       onUpdateInsurance={handleUpdateInsurance}
+      onCreateInsuranceName={handleCreateInsuranceName}
+      onUpdateInsuranceName={handleUpdateInsuranceName}
+      onDeleteInsuranceName={handleDeleteInsuranceName}
       onDeleteInsurance={handleDeleteInsurance}
       onCreateExpense={handleCreateExpense}
       onUpdateExpense={handleUpdateExpense}
