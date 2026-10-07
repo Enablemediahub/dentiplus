@@ -20,11 +20,120 @@ final class InsuranceController extends Controller
         $pdo = Database::connection();
         $branch = $this->resolvedBranchFilter($pdo, $user);
 
+        $this->ensureSchema($pdo);
+
         $items = $this->insuranceItems($pdo, $role, $staffId, $branch);
 
         Response::json([
             'summary' => $this->insuranceSummary($items),
             'items' => $items,
+            'catalog' => $this->insuranceCatalogItems($pdo),
+        ]);
+    }
+
+    public function storeCatalog(): void
+    {
+        $user = $this->authUser();
+        $role = $this->normalizedRole($user);
+        if (!in_array($role, ['receptionist', 'admin'], true)) {
+            Response::json(['message' => 'Only reception or admin can add insurance names.'], 403);
+        }
+
+        $payload = Request::json();
+        $pdo = Database::connection();
+        $this->ensureSchema($pdo);
+
+        $name = trim((string) ($payload['name'] ?? ''));
+        if ($name === '') {
+            Response::json(['message' => 'Insurance name is required.'], 422);
+        }
+
+        $statement = $pdo->prepare('SELECT id FROM insurance_catalog WHERE name = :name LIMIT 1');
+        $statement->execute(['name' => $name]);
+        if ($statement->fetch(PDO::FETCH_ASSOC)) {
+            Response::json(['message' => 'That insurance name already exists.'], 409);
+        }
+
+        $insert = $pdo->prepare('INSERT INTO insurance_catalog (name, created_at, updated_at) VALUES (:name, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)');
+        $insert->execute(['name' => $name]);
+
+        Response::json([
+            'message' => 'Insurance name added successfully.',
+            'catalog' => $this->insuranceCatalogItems($pdo),
+        ]);
+    }
+
+    public function updateCatalog(): void
+    {
+        $user = $this->authUser();
+        $role = $this->normalizedRole($user);
+        if (!in_array($role, ['receptionist', 'admin'], true)) {
+            Response::json(['message' => 'Only reception or admin can update insurance names.'], 403);
+        }
+
+        $payload = Request::json();
+        $pdo = Database::connection();
+        $this->ensureSchema($pdo);
+
+        $id = isset($payload['id']) ? (int) $payload['id'] : 0;
+        $name = trim((string) ($payload['name'] ?? ''));
+
+        if ($id <= 0) {
+            Response::json(['message' => 'Insurance name ID is required.'], 422);
+        }
+
+        if ($name === '') {
+            Response::json(['message' => 'Insurance name is required.'], 422);
+        }
+
+        $statement = $pdo->prepare('SELECT id FROM insurance_catalog WHERE name = :name AND id <> :id LIMIT 1');
+        $statement->execute([
+            'id' => $id,
+            'name' => $name,
+        ]);
+        if ($statement->fetch(PDO::FETCH_ASSOC)) {
+            Response::json(['message' => 'That insurance name already exists.'], 409);
+        }
+
+        $update = $pdo->prepare('UPDATE insurance_catalog SET name = :name, updated_at = CURRENT_TIMESTAMP WHERE id = :id LIMIT 1');
+        $update->execute([
+            'id' => $id,
+            'name' => $name,
+        ]);
+
+        Response::json([
+            'message' => 'Insurance name updated successfully.',
+            'catalog' => $this->insuranceCatalogItems($pdo),
+        ]);
+    }
+
+    public function deleteCatalog(): void
+    {
+        $user = $this->authUser();
+        $role = $this->normalizedRole($user);
+        if (!in_array($role, ['receptionist', 'admin'], true)) {
+            Response::json(['message' => 'Only reception or admin can delete insurance names.'], 403);
+        }
+
+        $payload = Request::json();
+        $pdo = Database::connection();
+        $this->ensureSchema($pdo);
+
+        $id = isset($payload['id']) ? (int) $payload['id'] : 0;
+        if ($id <= 0) {
+            Response::json(['message' => 'Insurance name ID is required.'], 422);
+        }
+
+        try {
+            $delete = $pdo->prepare('DELETE FROM insurance_catalog WHERE id = :id LIMIT 1');
+            $delete->execute(['id' => $id]);
+        } catch (Throwable $exception) {
+            Response::json(['message' => 'Unable to delete this insurance name right now.'], 409);
+        }
+
+        Response::json([
+            'message' => 'Insurance name deleted successfully.',
+            'catalog' => $this->insuranceCatalogItems($pdo),
         ]);
     }
 
@@ -191,5 +300,50 @@ final class InsuranceController extends Controller
             'completedCount' => $completed,
             'pendingCount' => $pending,
         ];
+    }
+
+    private function insuranceCatalogItems(PDO $pdo): array
+    {
+        $statement = $pdo->query('SELECT id, name, created_at FROM insurance_catalog ORDER BY name ASC, id ASC');
+        return array_map(static function (array $row): array {
+            return [
+                'id' => (int) ($row['id'] ?? 0),
+                'name' => (string) ($row['name'] ?? ''),
+                'createdAtLabel' => !empty($row['created_at']) ? date('d M Y h:i A', strtotime((string) ($row['created_at'] ?? ''))) : '',
+            ];
+        }, $statement->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    private function ensureSchema(PDO $pdo): void
+    {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS insurance_catalog (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY insurance_catalog_name_unique (name)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        $defaults = [
+            'Cosmopolitan Health Insurance',
+            'Equity Health Insurance',
+            'Glico',
+            'Premier Health Insurance',
+            'Acacia',
+            'Metropolitan',
+            'ACE Health Insurance',
+            'GAB Insurance',
+        ];
+
+        foreach ($defaults as $defaultName) {
+            $statement = $pdo->prepare('SELECT id FROM insurance_catalog WHERE name = :name LIMIT 1');
+            $statement->execute(['name' => $defaultName]);
+            if ($statement->fetch(PDO::FETCH_ASSOC)) {
+                continue;
+            }
+
+            $insert = $pdo->prepare('INSERT INTO insurance_catalog (name, created_at, updated_at) VALUES (:name, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)');
+            $insert->execute(['name' => $defaultName]);
+        }
     }
 }

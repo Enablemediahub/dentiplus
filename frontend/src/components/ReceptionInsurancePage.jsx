@@ -33,6 +33,44 @@ function matchesSearch(item, query) {
   ].join(' ').toLowerCase().includes(trimmed);
 }
 
+function InsuranceCatalogModal({ feedback, isEditMode, isOpen, name, onChange, onClose, onSubmit, saving }) {
+  if (!isOpen) {
+    return null;
+  }
+
+  return (
+    <div className="workspace-modal-backdrop" onClick={onClose} role="presentation">
+      <div aria-modal="true" className="workspace-modal workspace-modal--wide" onClick={(event) => event.stopPropagation()} role="dialog">
+        <div className="workspace-modal__header">
+          <div className="workspace-patient-summary">
+            <p className="eyebrow eyebrow--modal">Insurance catalog</p>
+            <h3>{isEditMode ? 'Edit insurance name' : 'Add a new insurance name'}</h3>
+            <div className="workspace-patient-meta">
+              <span>Available on receptionist payment forms after save</span>
+            </div>
+          </div>
+          <button className="ghost-button secondary-action--compact" onClick={onClose} type="button">Close</button>
+        </div>
+        <form className="workspace-modal__body" onSubmit={onSubmit}>
+          <div className="form-grid">
+            <label className="field-block field-block--wide">
+              <span>Insurance name</span>
+              <input autoFocus name="name" onChange={onChange} placeholder="e.g. NHIS, Vanguard, Enterprise Life" required type="text" value={name} />
+            </label>
+          </div>
+          {feedback ? <p className="form-error">{feedback}</p> : null}
+          <div className="workspace-card__actions">
+            <button className="primary-button workspace-inline-action" disabled={saving} type="submit">
+              <PortalIcon className="workspace-submit-icon" name="plus-square" />
+              <span>{saving ? 'Saving...' : (isEditMode ? 'Save changes' : 'Add insurance name')}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function InsuranceModal({ deleting, feedback, form, isOpen, onChange, onClose, onDelete, onSubmit, saving }) {
   if (!isOpen || !form) {
     return null;
@@ -96,12 +134,17 @@ function InsuranceModal({ deleting, feedback, form, isOpen, onChange, onClose, o
   );
 }
 
-export function ReceptionInsurancePage({ data, onDeleteInsurance, onUpdateInsurance }) {
+export function ReceptionInsurancePage({ data, onCreateInsuranceName, onDeleteInsurance, onUpdateInsurance, onDeleteInsuranceName, onUpdateInsuranceName }) {
   const [search, setSearch] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState('all');
   const [typeFilter, setTypeFilter] = React.useState('all');
   const [page, setPage] = React.useState(1);
   const [rowsPerPage, setRowsPerPage] = React.useState(15);
+  const [catalogOpen, setCatalogOpen] = React.useState(false);
+  const [catalogName, setCatalogName] = React.useState('');
+  const [catalogFeedback, setCatalogFeedback] = React.useState('');
+  const [catalogSaving, setCatalogSaving] = React.useState(false);
+  const [catalogEditItem, setCatalogEditItem] = React.useState(null);
   const [activeRecord, setActiveRecord] = React.useState(null);
   const [form, setForm] = React.useState(null);
   const [feedback, setFeedback] = React.useState('');
@@ -109,6 +152,7 @@ export function ReceptionInsurancePage({ data, onDeleteInsurance, onUpdateInsura
   const [deleting, setDeleting] = React.useState(false);
 
   const items = data?.items ?? [];
+  const catalogItems = data?.catalog ?? [];
   const summary = data?.summary ?? {};
   const filteredItems = items.filter((item) => {
     const statusMatch = statusFilter === 'all' || String(item.status ?? '').toLowerCase().replace(/\s+/g, '_') === statusFilter;
@@ -126,6 +170,63 @@ export function ReceptionInsurancePage({ data, onDeleteInsurance, onUpdateInsura
   React.useEffect(() => {
     setPage((current) => clampPage(current, totalPages));
   }, [totalPages]);
+
+  function openCatalogModal(item = null) {
+    setCatalogEditItem(item);
+    setCatalogName(item?.name ?? '');
+    setCatalogFeedback('');
+    setCatalogOpen(true);
+  }
+
+  async function handleCatalogSubmit(event) {
+    event.preventDefault();
+    if (!onCreateInsuranceName) {
+      return;
+    }
+
+    setCatalogSaving(true);
+    setCatalogFeedback('');
+    try {
+      if (catalogEditItem?.id && onUpdateInsuranceName) {
+        await onUpdateInsuranceName({ id: catalogEditItem.id, name: catalogName });
+      } else {
+        await onCreateInsuranceName({ name: catalogName });
+      }
+      setCatalogOpen(false);
+      setCatalogName('');
+      setCatalogEditItem(null);
+    } catch (error) {
+      setCatalogFeedback(error.message);
+    } finally {
+      setCatalogSaving(false);
+    }
+  }
+
+  async function handleDeleteCatalogItem(item) {
+    if (!item?.id || !onDeleteInsuranceName) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete insurance name "${item.name}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setCatalogSaving(true);
+    setCatalogFeedback('');
+    try {
+      await onDeleteInsuranceName({ id: item.id });
+      if (catalogEditItem?.id === item.id) {
+        setCatalogOpen(false);
+        setCatalogEditItem(null);
+        setCatalogName('');
+      }
+    } catch (error) {
+      setCatalogFeedback(error.message);
+    } finally {
+      setCatalogSaving(false);
+    }
+  }
 
   function openRecord(item) {
     setActiveRecord(item);
@@ -244,6 +345,34 @@ export function ReceptionInsurancePage({ data, onDeleteInsurance, onUpdateInsura
             <p className="stat-card__trend">{item.trend}</p>
           </article>
         ))}
+      </section>
+
+      <section className="module-card reception-toolbar-card insurance-action-panel">
+        <div className="panel-heading workspace-card__header">
+          <div>
+            <p className="eyebrow">Action panel</p>
+            <h3>Insurance names</h3>
+            <p>Add a new insurance name here so it becomes available on the reception payment screen for registration, consultation, and procedure billing.</p>
+          </div>
+          <button className="primary-button workspace-inline-action" onClick={openCatalogModal} type="button">
+            <PortalIcon className="workspace-submit-icon" name="plus-square" />
+            <span>Add insurance name</span>
+          </button>
+        </div>
+        <div className="reception-filter-strip" style={{ marginTop: '10px' }}>
+          <div className="field-block field-block--wide">
+            <span>Current insurance names</span>
+            <div className="reception-action-row" style={{ flexWrap: 'wrap' }}>
+              {catalogItems.length ? catalogItems.map((item) => (
+                <span className="workspace-edited-chip" key={`catalog-${item.id}`}>
+                  <span>{item.name}</span>
+                  <button className="ghost-button secondary-action--compact" onClick={() => openCatalogModal(item)} type="button">Edit</button>
+                  <button className="ghost-button secondary-action--compact destructive-button" onClick={() => handleDeleteCatalogItem(item)} type="button">Delete</button>
+                </span>
+              )) : <span className="table-subcopy">No insurance names saved yet.</span>}
+            </div>
+          </div>
+        </div>
       </section>
 
       <section className="module-card reception-toolbar-card">
@@ -367,6 +496,22 @@ export function ReceptionInsurancePage({ data, onDeleteInsurance, onUpdateInsura
         onDelete={handleDelete}
         onSubmit={handleSubmit}
         saving={saving}
+      />
+
+      <InsuranceCatalogModal
+        feedback={catalogFeedback}
+        isEditMode={Boolean(catalogEditItem)}
+        isOpen={catalogOpen}
+        name={catalogName}
+        onChange={(event) => setCatalogName(event.target.value)}
+        onClose={() => {
+          setCatalogOpen(false);
+          setCatalogFeedback('');
+          setCatalogEditItem(null);
+          setCatalogName('');
+        }}
+        onSubmit={handleCatalogSubmit}
+        saving={catalogSaving}
       />
     </>
   );

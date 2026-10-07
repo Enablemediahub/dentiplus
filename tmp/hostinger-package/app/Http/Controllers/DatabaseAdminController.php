@@ -19,6 +19,7 @@ final class DatabaseAdminController extends Controller
         'payments',
         'receipts',
         'health_insurance',
+        'insurance_catalog',
         'expenses',
         'medical_records',
         'prescriptions',
