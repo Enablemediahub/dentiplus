@@ -1294,6 +1294,7 @@ final class BillingController extends Controller
 
         $payload = [
             'bill_type' => (string) ($billing['bill_type'] ?? ''),
+            'billing_id' => isset($billing['id']) ? (int) $billing['id'] : null,
             'patient_id' => isset($billing['patient_id']) ? (int) $billing['patient_id'] : null,
             'patient_name' => (string) ($billing['patient_name'] ?? ''),
             'amount' => round((float) ($billing['amount'] ?? 0), 2),

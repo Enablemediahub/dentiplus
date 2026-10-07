@@ -808,7 +808,10 @@ function useDentiplusPortal() {
     }
 
     const response = await api.sendCustomerSms(token, values);
-    await refreshReceptionWorkspace(token);
+    setPortalData((current) => ({
+      ...current,
+      customerService: { ...current?.customerService, smsLogs: response.smsLogs, followUps: response.followUps },
+    }));
 
     return response;
   }

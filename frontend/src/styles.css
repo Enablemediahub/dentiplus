@@ -14,6 +14,33 @@
   --shadow-card: 0 24px 56px rgba(11, 16, 13, 0.3);
 }
 
+.sms-overview {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.sms-stat {
+  display: grid;
+  gap: 12px;
+  text-align: left;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.sms-stat strong { font-size: 2rem; color: var(--brand-green); }
+.sms-stat span:last-child { font-size: .85rem; color: var(--text-muted); }
+.sms-queue-tabs { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0; }
+.sms-external { display: grid; gap: 16px; }
+.sms-external > button { justify-self: start; }
+.sms-preview { padding: 16px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface-soft); }
+.sms-preview p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.sms-recipient-preview { max-height: 250px; overflow: auto; }
+.sms-progress { color: var(--text-primary); overflow-wrap: anywhere; }
+:root[data-theme='light'] .sms-stat strong { color: #39720e; }
+@media (max-width: 900px) { .sms-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .sms-overview { grid-template-columns: 1fr; } }
+
 :root[data-theme='light'] {
   color-scheme: light;
   --brand-green: #39ff14;

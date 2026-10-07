@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Support\Database;
+use App\Support\Env;
 use App\Support\Request;
 use App\Support\Response;
 use PDO;
@@ -25,6 +26,8 @@ final class CustomerServiceController extends Controller
 
         Response::json([
             'templates' => $this->templates($pdo),
+            'clients' => $this->clientQueue($pdo),
+            'smsConfigured' => trim((string) Env::get('ARKESEL_API_KEY', '')) !== '' && trim((string) Env::get('ARKESEL_SENDER_ID', '')) !== '',
             'birthdays' => $this->birthdayQueue($pdo),
             'appointments' => $this->appointmentQueue($pdo, $role, $staffId, $branch),
             'dormantPatients' => $this->dormantQueue($pdo, $role, $staffId, $branch),
@@ -143,14 +146,29 @@ final class CustomerServiceController extends Controller
             Response::json(['message' => 'A message and at least one recipient are required.'], 422);
         }
 
-        $apiKey = trim((string) getenv('ARKESEL_API_KEY'));
-        $senderId = trim((string) getenv('ARKESEL_SENDER_ID'));
+        $apiKey = trim((string) Env::get('ARKESEL_API_KEY', ''));
+        $senderId = trim((string) Env::get('ARKESEL_SENDER_ID', ''));
+        if ($apiKey === '' || $senderId === '') {
+            Response::json(['message' => 'SMS sending is unavailable. Configure the Arkesel API key and sender ID first.'], 422);
+        }
+        if (count($recipients) > 10) {
+            Response::json(['message' => 'Send a maximum of 10 recipients per batch.'], 422);
+        }
+        set_time_limit(120);
         $sentCount = 0;
         $failedCount = 0;
+        $results = [];
+        $seen = [];
 
         foreach ($recipients as $recipient) {
             $phone = $this->normalizePhoneNumber((string) ($recipient['phone'] ?? ''));
             $patientId = isset($recipient['patient_id']) ? (int) $recipient['patient_id'] : 0;
+            if ($phone !== null && isset($seen[$phone])) {
+                continue;
+            }
+            if ($phone !== null) {
+                $seen[$phone] = true;
+            }
             $personalizedMessage = $this->personalizeMessage($message, [
                 'first_name' => (string) ($recipient['first_name'] ?? ''),
                 'last_name' => (string) ($recipient['last_name'] ?? ''),
@@ -159,6 +177,7 @@ final class CustomerServiceController extends Controller
             if ($phone === null) {
                 $this->logSms($pdo, $patientId, (string) ($recipient['phone'] ?? ''), $personalizedMessage, 'failed', 'Invalid phone number format');
                 $failedCount++;
+                $results[] = ['phone' => (string) ($recipient['phone'] ?? ''), 'status' => 'failed'];
                 continue;
             }
 
@@ -170,6 +189,7 @@ final class CustomerServiceController extends Controller
             }
 
             $this->logSms($pdo, $patientId, $phone, $personalizedMessage, $status, $responseText);
+            $results[] = ['phone' => $phone, 'status' => $status];
 
             if ($status === 'sent') {
                 $sentCount++;
@@ -178,12 +198,15 @@ final class CustomerServiceController extends Controller
             }
         }
 
-        if ($followUpId > 0 && $staffId > 0) {
+        if ($followUpId > 0 && $staffId > 0 && $sentCount > 0 && count($recipients) === 1) {
             $this->markFollowUpContacted($pdo, $followUpId, $staffId, $message);
         }
 
         Response::json([
             'message' => sprintf('SMS processed for %d recipient(s), %d failed.', $sentCount, $failedCount),
+            'sentCount' => $sentCount,
+            'failedCount' => $failedCount,
+            'results' => $results,
             'smsLogs' => $this->smsLogs($pdo),
             'followUps' => $this->followUps($pdo, $this->normalizedRole($user), $staffId, trim((string) ($user['branch'] ?? ''))),
         ]);
@@ -263,18 +286,36 @@ final class CustomerServiceController extends Controller
         ], $statement->fetchAll(PDO::FETCH_ASSOC));
     }
 
-    private function birthdayQueue(PDO $pdo): array
+    private function clientQueue(PDO $pdo): array
     {
-        $statement = $pdo->query(
-            "SELECT id, first_name, last_name, other_names, phone, email, birth_date
-             FROM patients
-             WHERE birth_date IS NOT NULL
-               AND DATE_FORMAT(birth_date, '%m-%d') BETWEEN DATE_FORMAT(CURDATE(), '%m-%d')
-               AND DATE_FORMAT(DATE_ADD(CURDATE(), INTERVAL 7 DAY), '%m-%d')
-             ORDER BY DATE_FORMAT(birth_date, '%m-%d') ASC"
-        );
+        $rows = $pdo->query('SELECT id, first_name, last_name, other_names, phone, email FROM patients ORDER BY first_name, last_name, id')->fetchAll(PDO::FETCH_ASSOC);
+        return array_map(fn (array $row): array => $this->mapPatientQueueRow($row, 'Client database', 'client', ''), $rows);
+    }
 
-        return array_map(fn (array $row): array => $this->mapPatientQueueRow($row, 'Birthday outreach', 'birthday', (string) ($row['birth_date'] ?? '')), $statement->fetchAll(PDO::FETCH_ASSOC));
+    private function birthdayQueue(PDO $pdo, ?\DateTimeImmutable $today = null): array
+    {
+        $rows = $pdo->query('SELECT id, first_name, last_name, other_names, phone, email, birth_date FROM patients WHERE birth_date IS NOT NULL')->fetchAll(PDO::FETCH_ASSOC);
+        $today ??= new \DateTimeImmutable('today');
+        $end = $today->modify('+30 days');
+        $items = [];
+        foreach ($rows as $row) {
+            if (!strtotime((string) $row['birth_date'])) {
+                continue;
+            }
+            $monthDay = date('m-d', strtotime((string) $row['birth_date']));
+            $birthday = new \DateTimeImmutable($today->format('Y') . '-' . $monthDay);
+            if ($birthday < $today) {
+                $birthday = new \DateTimeImmutable($today->modify('+1 year')->format('Y') . '-' . $monthDay);
+            }
+            if ($birthday <= $end) {
+                $item = $this->mapPatientQueueRow($row, 'Birthday outreach', 'birthday', $birthday->format('Y-m-d'));
+                $days = (int) $today->diff($birthday)->days;
+                $item['note'] = $days === 0 ? 'Birthday today' : 'Birthday in ' . $days . ' day(s)';
+                $items[] = $item;
+            }
+        }
+        usort($items, static fn (array $a, array $b): int => strcmp($a['eventDate'], $b['eventDate']));
+        return $items;
     }
 
     private function appointmentQueue(PDO $pdo, string $role, int $staffId, string $branch): array
@@ -340,32 +381,43 @@ final class CustomerServiceController extends Controller
                 p.other_names,
                 p.phone,
                 p.email,
-                MAX(a.appointment_date) AS last_visit
+                p.created_at,
+                GREATEST(COALESCE(DATE(p.completed_time), '1000-01-01'),
+                    COALESCE(MAX(a.appointment_date), '1000-01-01')) AS last_visit
             FROM patients p
             LEFT JOIN appointments a ON a.patient_name = CONCAT_WS(' ', p.first_name, NULLIF(p.other_names, ''), p.last_name)
+                AND LOWER(a.status) = 'completed' AND a.appointment_date <= CURDATE()
             LEFT JOIN staff s ON s.id = a.dentist_id
             LEFT JOIN staff_branches sb ON sb.staff_id = s.id
-            WHERE p.phone IS NOT NULL
-              AND p.phone <> ''";
+            WHERE 1=1";
         $params = [];
 
         if ($role === 'receptionist' && $branch !== '') {
-            $sql .= ' AND (sb.branch = :branch OR sb.branch IS NULL)';
+            $sql .= " AND (p.branch = :branch OR (COALESCE(p.branch, '') = '' AND EXISTS
+                (SELECT 1 FROM staff_branches psb WHERE psb.staff_id = p.receptionist_id AND psb.branch = :patient_branch)))";
             $params['branch'] = $branch;
+            $params['patient_branch'] = $branch;
         } elseif ($role === 'dentist' && $staffId > 0) {
             $sql .= ' AND a.dentist_id = :dentist_id';
             $params['dentist_id'] = $staffId;
         }
 
         $sql .= "
-            GROUP BY p.id, p.first_name, p.last_name, p.other_names, p.phone, p.email
-            HAVING last_visit IS NULL OR last_visit < DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+            GROUP BY p.id, p.first_name, p.last_name, p.other_names, p.phone, p.email, p.created_at, p.completed_time
+            HAVING (last_visit <> '1000-01-01' AND last_visit <= DATE_SUB(CURDATE(), INTERVAL 6 MONTH))
+                OR (last_visit = '1000-01-01' AND DATE(p.created_at) <= DATE_SUB(CURDATE(), INTERVAL 6 MONTH))
             ORDER BY last_visit ASC, p.first_name ASC";
 
         $statement = $pdo->prepare($sql);
         $statement->execute($params);
 
-        return array_map(fn (array $row): array => $this->mapPatientQueueRow($row, 'Dormant patients', 'dormant', (string) ($row['last_visit'] ?? '')), $statement->fetchAll(PDO::FETCH_ASSOC));
+        return array_map(function (array $row): array {
+            $lastVisit = $row['last_visit'] === '1000-01-01' ? '' : (string) $row['last_visit'];
+            $item = $this->mapPatientQueueRow($row, 'Six-month dental recall', 'dormant', $lastVisit);
+            $item['note'] = $lastVisit === '' ? 'No completed visit recorded; registered over six months ago' : 'Last completed visit: ' . $item['eventDateLabel'];
+            $item['status'] = 'Recall due';
+            return $item;
+        }, $statement->fetchAll(PDO::FETCH_ASSOC));
     }
 
     private function followUps(PDO $pdo, string $role, int $staffId, string $branch): array
@@ -579,11 +631,11 @@ final class CustomerServiceController extends Controller
             $clean = '+233' . substr($clean, 1);
         } elseif (preg_match('/^233\d{9}$/', $clean) === 1) {
             $clean = '+' . $clean;
-        } elseif ($clean[0] !== '+') {
-            $clean = '+233' . ltrim($clean, '0');
+        } elseif (preg_match('/^\d{9}$/', $clean) === 1) {
+            $clean = '+233' . $clean;
         }
 
-        return preg_match('/^\+\d{10,15}$/', $clean) === 1 ? $clean : null;
+        return preg_match('/^\+[1-9]\d{9,14}$/', $clean) === 1 ? $clean : null;
     }
 
     private function personalizeMessage(string $message, array $recipient): string
@@ -611,7 +663,7 @@ final class CustomerServiceController extends Controller
 
         $handle = curl_init($url);
         curl_setopt($handle, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($handle, CURLOPT_TIMEOUT, 30);
+        curl_setopt($handle, CURLOPT_TIMEOUT, 10);
         $response = curl_exec($handle);
         $httpCode = (int) curl_getinfo($handle, CURLINFO_HTTP_CODE);
         $error = curl_error($handle);
@@ -621,7 +673,7 @@ final class CustomerServiceController extends Controller
             return ['failed', $error];
         }
 
-        if ($httpCode === 200 && is_string($response) && str_contains($response, '"code":"ok"')) {
+        if ($httpCode === 200 && is_string($response) && (json_decode($response, true)['code'] ?? '') === 'ok') {
             return ['sent', $response];
         }
 

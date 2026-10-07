@@ -34,10 +34,19 @@ function normalizeLeadingUppercase(value) {
   return String(value ?? '').replace(/^([a-z])/, (match) => match.toUpperCase());
 }
 
+function normalizeSmsPhone(value) {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  if (/^0\d{9}$/.test(digits)) return '+233' + digits.slice(1);
+  if (/^\d{9}$/.test(digits)) return '+233' + digits;
+  if (/^233\d{9}$/.test(digits)) return '+' + digits;
+  if (String(value).trim().startsWith('+') && /^[1-9]\d{9,14}$/.test(digits)) return '+' + digits;
+  return null;
+}
 const QUEUE_OPTIONS = [
-  { id: 'birthdays', label: 'Birthdays' },
+  { id: 'clients', label: 'All clients' },
+  { id: 'birthdays', label: 'Birthdays | next 30 days' },
   { id: 'appointments', label: 'Upcoming Appointments' },
-  { id: 'dormantPatients', label: 'No Visit 6 Months' },
+  { id: 'dormantPatients', label: 'Six-month dental recall' },
   { id: 'followUps', label: 'Follow-up Tracker' },
 ];
 
@@ -88,7 +97,7 @@ function TemplateModal({ editingTemplate, feedback, form, isOpen, onChange, onCl
   );
 }
 
-function SmsModal({ feedback, form, isOpen, onChange, onClose, onSubmit, recipients, saving, templates }) {
+function SmsModal({ feedback, form, isOpen, onChange, onClose, onSubmit, recipients, saving, templates, progress, configured, completed }) {
   if (!isOpen) {
     return null;
   }
@@ -104,12 +113,12 @@ function SmsModal({ feedback, form, isOpen, onChange, onClose, onSubmit, recipie
               <span>{recipients.length} recipient(s)</span>
             </div>
           </div>
-          <button className="ghost-button secondary-action--compact" onClick={onClose} type="button">Close</button>
+          <button className="ghost-button secondary-action--compact" disabled={saving} onClick={onClose} type="button">Close</button>
         </div>
         <form className="workspace-modal__body" onSubmit={onSubmit}>
           <label className="field-block">
             <span>Template</span>
-            <select name="template_id" onChange={onChange} value={form.template_id}>
+            <select name="template_id" disabled={saving} onChange={onChange} value={form.template_id}>
               <option value="">Custom message</option>
               {templates.map((template) => (
                 <option key={`template-${template.id}`} value={template.id}>
@@ -120,9 +129,14 @@ function SmsModal({ feedback, form, isOpen, onChange, onClose, onSubmit, recipie
           </label>
           <label className="field-block field-block--wide">
             <span>Message</span>
-            <textarea name="message" onChange={onChange} required rows={6} value={form.message} />
+            <textarea name="message" disabled={saving} onChange={onChange} required rows={6} value={form.message} />
           </label>
-          <div className="table-wrap">
+          <label className="field-block"><span>Recipients per batch</span><select name="batch_size" disabled={saving} onChange={onChange} value={form.batch_size ?? 5}><option value={1}>1</option><option value={5}>5</option><option value={10}>10</option></select></label>
+          <p className="table-counter">{recipients.length} unique valid numbers | {Math.ceil(recipients.length / Number(form.batch_size ?? 5))} batches. Keep this page open while sending.</p>
+          <p className="table-counter">Personalize with {'{first_name}'}, {'{last_name}'}, or {'{full_name}'}. External contacts use Client as their first name.</p>
+          {recipients[0] ? <div className="sms-preview"><strong>Preview for {recipients[0].patientName}</strong><p>{form.message.replaceAll('{first_name}', recipients[0].firstName || 'Client').replaceAll('{last_name}', recipients[0].lastName || '').replaceAll('{full_name}', recipients[0].patientName)}</p></div> : null}
+          {configured === false ? <p className="form-error">SMS provider is not configured. Add the Arkesel API key and sender ID before sending.</p> : null}
+          <div className="table-wrap sms-recipient-preview">
             <table className="data-table">
               <thead>
                 <tr>
@@ -132,7 +146,7 @@ function SmsModal({ feedback, form, isOpen, onChange, onClose, onSubmit, recipie
                 </tr>
               </thead>
               <tbody>
-                {recipients.map((recipient) => (
+                {recipients.slice(0, 20).map((recipient) => (
                   <tr key={`sms-recipient-${recipient.id}-${recipient.queueType}`}>
                     <td>{recipient.patientName}</td>
                     <td>{formatPhoneNumber(recipient.phone)}</td>
@@ -142,11 +156,13 @@ function SmsModal({ feedback, form, isOpen, onChange, onClose, onSubmit, recipie
               </tbody>
             </table>
           </div>
+          {recipients.length > 20 ? <p className="table-counter">Showing the first 20 of {recipients.length} recipients. All valid recipients will be included.</p> : null}
           {feedback ? <p className="form-error">{feedback}</p> : null}
           <div className="workspace-card__actions">
-            <button className="primary-button workspace-inline-action" disabled={saving} type="submit">
+            {progress ? <p role="status" className="sms-progress">{progress}</p> : null}
+            <button className="primary-button workspace-inline-action" disabled={saving || completed || !recipients.length || configured === false || !form.message.trim()} type="submit">
               <PortalIcon className="workspace-submit-icon" name="message" />
-              <span>{saving ? 'Sending...' : 'Send SMS'}</span>
+              <span>{saving ? 'Sending...' : completed ? 'Finished - close to start a new message' : 'Send SMS'}</span>
             </button>
           </div>
         </form>
@@ -215,7 +231,7 @@ export function ReceptionCustomerServicePage({
   onUpdateFollowUp,
   onUpdateTemplate,
 }) {
-  const [queueType, setQueueType] = React.useState('birthdays');
+  const [queueType, setQueueType] = React.useState('clients');
   const [search, setSearch] = React.useState('');
   const [page, setPage] = React.useState(1);
   const [rowsPerPage, setRowsPerPage] = React.useState(15);
@@ -225,10 +241,15 @@ export function ReceptionCustomerServicePage({
   const [templateSaving, setTemplateSaving] = React.useState(false);
   const [templateFeedback, setTemplateFeedback] = React.useState('');
   const [templateForm, setTemplateForm] = React.useState({ category: 'Birthday', template_name: '', message_text: '' });
+  const [externalNumbers, setExternalNumbers] = React.useState('');
+  const [recipientMode, setRecipientMode] = React.useState('selected');
+  const [smsProgress, setSmsProgress] = React.useState('');
+  const [campaignResult, setCampaignResult] = React.useState('');
+  const [smsCompleted, setSmsCompleted] = React.useState(false);
   const [smsModalOpen, setSmsModalOpen] = React.useState(false);
   const [smsSaving, setSmsSaving] = React.useState(false);
   const [smsFeedback, setSmsFeedback] = React.useState('');
-  const [smsForm, setSmsForm] = React.useState({ template_id: '', message: '' });
+  const [smsForm, setSmsForm] = React.useState({ template_id: '', message: '', batch_size: 5 });
   const [followUpModalOpen, setFollowUpModalOpen] = React.useState(false);
   const [followUpSaving, setFollowUpSaving] = React.useState(false);
   const [followUpFeedback, setFollowUpFeedback] = React.useState('');
@@ -253,6 +274,22 @@ export function ReceptionCustomerServicePage({
   const currentPage = clampPage(page, totalPages);
   const paginatedQueueItems = filteredQueueItems.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
   const selectedRecipients = queueItems.filter((item) => selectedIds.includes(`${item.id}-${item.queueType ?? queueType}`));
+  const externalTokens = externalNumbers.split(/[\s,;]+/).filter(Boolean);
+  const rawRecipients = recipientMode === 'all' ? (data?.clients ?? []) : recipientMode === 'external'
+    ? externalTokens.map((phone, index) => ({ id: index, patientId: 0, patientName: 'Client', firstName: 'Client', lastName: '', phone, queueType: 'external', queueLabel: 'External number' }))
+    : selectedRecipients;
+  const uniqueRecipients = new Map();
+  let invalidCount = 0;
+  rawRecipients.forEach((item) => {
+    const phone = normalizeSmsPhone(item.phone);
+    if (!phone) { invalidCount++; return; }
+    if (!uniqueRecipients.has(phone)) uniqueRecipients.set(phone, { ...item, phone, firstName: item.firstName || item.patientName.split(' ')[0], lastName: item.lastName || '' });
+  });
+  const smsRecipients = [...uniqueRecipients.values()];
+  const duplicateCount = rawRecipients.length - invalidCount - smsRecipients.length;
+  function openComposer(mode = 'selected') {
+    setRecipientMode(mode); setSmsFeedback(''); setSmsProgress(''); setSmsCompleted(false); setSmsModalOpen(true);
+  }
   const smsLogRowsPerPage = 10;
   const smsLogTotalPages = Math.max(1, Math.ceil(smsLogs.length / smsLogRowsPerPage));
   const currentSmsLogPage = clampPage(smsLogPage, smsLogTotalPages);
@@ -261,7 +298,9 @@ export function ReceptionCustomerServicePage({
   React.useEffect(() => {
     setPage(1);
     setSelectedIds([]);
-  }, [queueType, search, rowsPerPage]);
+  }, [queueType]);
+
+  React.useEffect(() => { setPage(1); }, [search, rowsPerPage]);
 
   React.useEffect(() => {
     setPage((current) => clampPage(current, totalPages));
@@ -277,7 +316,7 @@ export function ReceptionCustomerServicePage({
   }
 
   function selectVisibleRows() {
-    setSelectedIds(paginatedQueueItems.map((item) => `${item.id}-${item.queueType ?? queueType}`));
+    setSelectedIds((current) => [...new Set([...current, ...paginatedQueueItems.map((item) => `${item.id}-${item.queueType ?? queueType}`)])]);
   }
 
   function clearSelection() {
@@ -331,27 +370,32 @@ export function ReceptionCustomerServicePage({
 
   async function submitSms(event) {
     event.preventDefault();
-    setSmsSaving(true);
-    setSmsFeedback('');
+    if (smsSaving || smsCompleted || !smsRecipients.length) return;
+    const recipients = smsRecipients;
+    const batchSize = Number(smsForm.batch_size || 5);
+    const totalBatches = Math.ceil(recipients.length / batchSize);
+    setSmsSaving(true); setSmsFeedback('');
+    let sent = 0, failed = 0, processed = 0;
     try {
-      await onSendSms({
-        template_id: smsForm.template_id ? Number(smsForm.template_id) : 0,
-        message: smsForm.message,
-        recipients: selectedRecipients.map((item) => ({
-          patient_id: item.patientId,
-          first_name: item.firstName,
-          last_name: item.lastName,
-          phone: item.phone,
-        })),
-        follow_up_id: queueType === 'followUps' && selectedRecipients.length === 1 ? selectedRecipients[0].id : 0,
-      });
-      setSmsModalOpen(false);
-      setSmsForm({ template_id: '', message: '' });
-      setSelectedIds([]);
+      for (let offset = 0; offset < recipients.length; offset += batchSize) {
+        setSmsProgress(`Sending batch ${Math.floor(offset / batchSize) + 1} of ${totalBatches} | ${sent} sent | ${failed} failed`);
+        const batch = recipients.slice(offset, offset + batchSize);
+        const result = await onSendSms({
+          template_id: smsForm.template_id ? Number(smsForm.template_id) : 0,
+          message: smsForm.message,
+          recipients: batch.map((item) => ({ patient_id: item.patientId, first_name: item.firstName, last_name: item.lastName, phone: item.phone })),
+          follow_up_id: recipientMode === 'selected' && queueType === 'followUps' && recipients.length === 1 ? recipients[0].id : 0,
+        });
+        sent += result.sentCount ?? 0; failed += result.failedCount ?? 0; processed += batch.length;
+      }
+      const summary = `Campaign complete: ${sent} sent, ${failed} failed across ${totalBatches} batches. See SMS activity for details.`;
+      setCampaignResult(summary); setSmsProgress(summary);
     } catch (error) {
-      setSmsFeedback(error.message);
+      const summary = `Campaign stopped: ${sent} confirmed sent, ${failed} confirmed failed, ${recipients.length - processed} without a confirmed result. Check SMS activity before sending again to avoid duplicates.`;
+      setSmsFeedback(error.message); setSmsProgress(summary); setCampaignResult(summary);
     } finally {
-      setSmsSaving(false);
+      setSmsSaving(false); setSmsCompleted(true); setSelectedIds([]);
+      if (recipientMode === 'external') setExternalNumbers('');
     }
   }
 
@@ -380,36 +424,51 @@ export function ReceptionCustomerServicePage({
 
   return (
     <>
+      <div className="sms-overview">
+        {[['All clients', data?.clients?.length ?? 0, 'clients'], ['Birthdays in 30 days', data?.birthdays?.length ?? 0, 'birthdays'], ['Six-month recalls', data?.dormantPatients?.length ?? 0, 'dormantPatients'], ['Saved templates', templates.length, null]].map(([label, count, queue]) => (
+          <button key={label} className="module-card sms-stat" type="button" onClick={() => queue ? setQueueType(queue) : document.getElementById('sms-templates')?.scrollIntoView({ behavior: 'smooth' })}>
+            <span>{label}</span><strong>{count}</strong><span>{queue ? 'View clients' : 'Manage templates'}</span>
+          </button>
+        ))}
+      </div>
+      {campaignResult ? <p className="module-card sms-progress" role="status">{campaignResult}</p> : null}
       <section className="module-card reception-toolbar-card">
         <div className="panel-heading workspace-card__header">
           <div>
             <p className="eyebrow">Customer service</p>
-            <h3>Outreach and follow-up desk</h3>
-            <p>Built from the ASDental receptionist concept: message templates, birthday and appointment outreach, inactive-patient follow-up, and live SMS history in one service lane.</p>
+            <h3>SMS messaging & client care</h3>
+            <p>Send personalized messages to your clients or external numbers. Plan birthday wishes and six-month dental reminders, using your saved templates.</p>
           </div>
           <div className="workspace-card__actions reception-action-row reception-action-row--end">
             <button className="primary-button workspace-inline-action" onClick={() => setTemplateModalOpen(true)} type="button">
               <PortalIcon className="workspace-submit-icon" name="plus-square" />
               <span>New template</span>
             </button>
+            <button className="primary-button workspace-inline-action" disabled={!data?.clients?.length} onClick={() => openComposer('all')} type="button">
+              Message all clients ({data?.clients?.length ?? 0})
+            </button>
             <button className="ghost-button workspace-inline-action" disabled={!paginatedQueueItems.length} onClick={selectVisibleRows} type="button">
               <PortalIcon className="workspace-submit-icon" name="patients" />
-              <span>Select visible</span>
+              <span>Select this page</span>
             </button>
+            <button className="ghost-button workspace-inline-action" disabled={!filteredQueueItems.length} onClick={() => setSelectedIds(filteredQueueItems.map((item) => `${item.id}-${item.queueType ?? queueType}`))} type="button">Select all results ({filteredQueueItems.length})</button>
             <button className="ghost-button workspace-inline-action" disabled={!selectedRecipients.length} onClick={clearSelection} type="button">
               <PortalIcon className="workspace-submit-icon" name="close" />
               <span>Clear selection</span>
             </button>
-            <button className="ghost-button workspace-inline-action" disabled={!selectedRecipients.length} onClick={() => setSmsModalOpen(true)} type="button">
+            <button className="ghost-button workspace-inline-action" disabled={!selectedRecipients.length} onClick={() => openComposer('selected')} type="button">
               <PortalIcon className="workspace-submit-icon" name="message" />
               <span>{selectedRecipients.length > 1 ? `Send Bulk SMS (${selectedRecipients.length})` : 'Send SMS'}</span>
             </button>
           </div>
         </div>
 
+        <div className="sms-queue-tabs" aria-label="Recipient lists">
+          {QUEUE_OPTIONS.map((option) => <button key={option.id} className={queueType === option.id ? 'primary-button' : 'ghost-button'} onClick={() => setQueueType(option.id)} type="button">{option.label}</button>)}
+        </div>
         <div className="reception-filter-strip">
           <label className="field-block reception-inline-field reception-search-field">
-            <span>Search queue</span>
+            <span>Search clients</span>
             <PortalIcon className="reception-search-icon" name="search" />
             <input onChange={(event) => setSearch(event.target.value)} placeholder="Patient, phone, queue, notes..." type="text" value={search} />
           </label>
@@ -432,10 +491,15 @@ export function ReceptionCustomerServicePage({
         </div>
       </section>
 
+      <section className="module-card sms-external">
+        <div><p className="eyebrow">Message any number</p><h3>External recipients</h3><p>Paste numbers separated by spaces, commas, or new lines. Use Ghana local numbers or international numbers with +country code.</p></div>
+        <label className="field-block"><span>Phone numbers outside your database</span><textarea rows={3} value={externalNumbers} onChange={(event) => setExternalNumbers(event.target.value)} placeholder="0241234567, +233201234567" /></label>
+        <button className="primary-button" disabled={!externalTokens.length} onClick={() => openComposer('external')} type="button">Compose external SMS ({externalTokens.length})</button>
+      </section>
       <section className="module-card">
         <div className="panel-heading workspace-card__header">
           <div>
-            <p className="eyebrow">Outreach queue</p>
+            <p className="eyebrow">Client recipients | {selectedRecipients.length} selected across pages</p>
             <h3>{QUEUE_OPTIONS.find((item) => item.id === queueType)?.label ?? 'Queue'}</h3>
           </div>
           <span className="table-counter">
@@ -450,7 +514,7 @@ export function ReceptionCustomerServicePage({
                 <th>Select</th>
                 <th>Patient</th>
                 <th>Phone</th>
-                <th>Date</th>
+                <th>{queueType === 'clients' ? 'Email' : queueType === 'dormantPatients' ? 'Last completed visit' : 'Date'}</th>
                 <th>Status</th>
                 <th>Action</th>
               </tr>
@@ -462,20 +526,20 @@ export function ReceptionCustomerServicePage({
                 return (
                   <tr key={`customer-queue-${key}`}>
                     <td>
-                      <input checked={selectedIds.includes(key)} onChange={() => toggleSelection(item)} type="checkbox" />
+                      <input aria-label={`Select ${item.patientName}`} checked={selectedIds.includes(key)} onChange={() => toggleSelection(item)} type="checkbox" />
                     </td>
                     <td>
                       <strong>{item.patientName}</strong>
                       <span className="table-subcopy">{item.note || item.queueLabel}</span>
                     </td>
                     <td>{formatPhoneNumber(item.phone)}</td>
-                    <td>{item.eventDateLabel || item.lastAppointmentLabel}</td>
-                    <td>{followUpStatus}</td>
+                    <td>{queueType === 'clients' ? item.email || '-' : item.eventDateLabel || item.lastAppointmentLabel}</td>
+                    <td>{queueType === 'clients' ? normalizeSmsPhone(item.phone) ? 'Ready to message' : 'Missing or invalid phone' : followUpStatus}</td>
                     <td>
                       <div className="table-action-row">
-                        <button className="ghost-button secondary-action--compact workspace-inline-action" onClick={() => {
+                        <button className="ghost-button secondary-action--compact workspace-inline-action" disabled={!normalizeSmsPhone(item.phone)} onClick={() => {
                           setSelectedIds([key]);
-                          setSmsModalOpen(true);
+                          openComposer('selected');
                         }} type="button">
                           SMS
                         </button>
@@ -519,7 +583,7 @@ export function ReceptionCustomerServicePage({
         </div>
       </section>
 
-      <section className="module-card">
+      <section className="module-card" id="sms-templates">
         <div className="panel-heading workspace-card__header">
           <div>
             <p className="eyebrow">Message templates</p>
@@ -634,17 +698,21 @@ export function ReceptionCustomerServicePage({
       />
 
       <SmsModal
-        feedback={smsFeedback}
+        feedback={[smsFeedback, invalidCount ? `${invalidCount} invalid or missing numbers excluded.` : '', duplicateCount ? `${duplicateCount} duplicate numbers removed.` : ''].filter(Boolean).join(' ')}
+        progress={smsProgress}
+        completed={smsCompleted}
+        configured={data?.smsConfigured}
         form={smsForm}
         isOpen={smsModalOpen}
         onChange={handleSmsChange}
         onClose={() => {
+          if (smsSaving) return;
           setSmsModalOpen(false);
           setSmsFeedback('');
-          setSmsForm({ template_id: '', message: '' });
+          setSmsForm({ template_id: '', message: '', batch_size: 5 });
         }}
         onSubmit={submitSms}
-        recipients={selectedRecipients}
+        recipients={smsRecipients}
         saving={smsSaving}
         templates={templates}
       />

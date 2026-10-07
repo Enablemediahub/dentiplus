@@ -24,6 +24,11 @@ function matchesSearch(item, query) {
     item.billReference,
     item.branch,
     item.summary,
+    item.lastDentistName,
+    item.lastReceiptNumber,
+    item.lastTransactionLabel,
+    item.latestBillingReference,
+    item.patientContextLabel,
   ].join(' ').toLowerCase().includes(trimmed);
 }
 
@@ -132,6 +137,10 @@ export function AdminDeletionAuditPage({ data }) {
                 <th>Patient / Bill</th>
                 <th>Amount</th>
                 <th>Branch</th>
+                <th>Last Dentist</th>
+                <th>Last Receipt</th>
+                <th>Last Transaction</th>
+                <th>Latest Billing</th>
                 <th>Summary</th>
               </tr>
             </thead>
@@ -148,11 +157,29 @@ export function AdminDeletionAuditPage({ data }) {
                   </td>
                   <td>{item.amount > 0 ? formatCurrency(item.amount) : '--'}</td>
                   <td>{item.branch || 'Main clinic'}</td>
+                  <td>
+                    <strong>{item.lastDentistName || 'Unassigned'}</strong>
+                    <span className="table-subcopy">{item.lastDentistAssignedAtLabel || '--'}</span>
+                  </td>
+                  <td>
+                    <strong>{item.lastReceiptNumber || '--'}</strong>
+                    <span className="table-subcopy">{item.lastReceiptDateLabel || '--'}</span>
+                  </td>
+                  <td>
+                    <strong>{item.lastTransactionLabel || '--'}</strong>
+                    <span className="table-subcopy">{item.patientContextLabel || '--'}</span>
+                  </td>
+                  <td>
+                    <strong>{item.latestBillingReference || '--'}</strong>
+                    <span className="table-subcopy">
+                      {item.latestBillingDateLabel || '--'} | {item.latestBillingAmountLabel || '--'} | {item.latestBillingStatus || '--'}
+                    </span>
+                  </td>
                   <td>{item.summary || '--'}</td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan="8">No deletion activity matches the current search.</td>
+                  <td colSpan="12">No deletion activity matches the current search.</td>
                 </tr>
               )}
             </tbody>

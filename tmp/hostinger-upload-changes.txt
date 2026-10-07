@@ -1,0 +1,14 @@
+﻿Dentiplus incremental upload - customer-service SMS update
+
+Local package: 
+C:\xampp\htdocs\dentiplus\tmp\hostinger-package
+Upload only these four files to the matching paths in the existing Dentiplus deployment folder:
+
+public_html\assets\index-B9L7ihNZ.css
+public_html\assets\index-Bky-OF5B.js
+app\Http\Controllers\CustomerServiceController.php
+public_html\index.html
+
+Upload assets and the controller first; upload index.html last.
+Do not upload .env. Existing old assets can remain.
+Source/package SHA256 parity verified for all four files.
