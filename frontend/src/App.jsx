@@ -307,6 +307,11 @@ function useDentiplusPortal() {
       } catch (error) {
         clearSessionToken();
         if (active) {
+          setLoginError(
+            error instanceof Error
+              ? error.message
+              : 'Unable to load your workspace. Please sign in again.',
+          );
           setPortalData(null);
           setAssignmentsData(null);
           setProcedureChargesData(null);

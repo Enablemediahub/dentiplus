@@ -67,7 +67,7 @@ async function request(path, options = {}) {
   try {
     payload = text ? JSON.parse(text) : null;
   } catch (error) {
-    throw new Error('The API returned a non-JSON response.');
+    throw new Error(`The API returned a non-JSON response for ${path}.`);
   }
 
   if (!response.ok) {

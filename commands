@@ -1,3 +1,10 @@
+# Windows (run from the project folder)
 cd "c:\xampp\htdocs\dentiplus"
 powershell -ExecutionPolicy Bypass -File .\start-dentiplus.ps1
 powershell -ExecutionPolicy Bypass -File .\stop-dentiplus.ps1
+
+# macOS (run each start command in a separate Terminal window from the project folder)
+npm run frontend
+npm run backend
+
+# Stop each macOS server with Control-C in its Terminal window.

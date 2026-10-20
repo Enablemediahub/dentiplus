@@ -178,7 +178,9 @@ function emptyPrescriptionEntry() {
 }
 
 function normalizeLeadingUppercase(value) {
-  return String(value ?? '').replace(/^([a-z])/, (match) => match.toUpperCase());
+  return String(value ?? '').replace(/(^|\n)([a-z])/g, (match, lineStart, letter) => (
+    `${lineStart}${letter.toUpperCase()}`
+  ));
 }
 
 function toDateOnly(value) {

@@ -66,7 +66,7 @@ abstract class Controller
                  FROM staff_branches
                  WHERE branch IS NOT NULL
                    AND branch <> ''
-                 ORDER BY branch ASC"
+                ORDER BY branch_name ASC"
             );
         }
 
