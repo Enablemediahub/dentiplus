@@ -2,6 +2,7 @@ import React from 'react';
 import { DateInputField } from './DateInputField';
 import { PortalIcon } from './PortalIcon';
 import { displayDateToIso, formatDateRangeLabel, isoToDisplayDate, normalizeDateEntry } from '../lib/dateInput';
+import { matchesSearchText } from '../lib/search';
 
 function formatCurrency(value) {
   return `GHS ${Number(value ?? 0).toLocaleString(undefined, {
@@ -143,24 +144,19 @@ function resolveFrontdeskFees(patient) {
 }
 
 function matchesSearch(item, query) {
-  const trimmed = query.trim().toLowerCase();
-  if (!trimmed) {
-    return true;
-  }
-
-  return [
+  return matchesSearchText([
     item.bill,
     item.patientName,
+    item.firstName,
+    item.otherNames,
+    item.lastName,
     item.procedure,
     item.chargeSummary,
     item.dentistName,
     item.status,
     item.notes,
     item.billTypeLabel,
-  ]
-    .join(' ')
-    .toLowerCase()
-    .includes(trimmed);
+  ].join(' '), query);
 }
 
 function matchesBillFilters(item, billTypeFilter, statusFilter) {
@@ -171,22 +167,20 @@ function matchesBillFilters(item, billTypeFilter, statusFilter) {
 }
 
 function matchesHistorySearch(item, query) {
-  const trimmed = query.trim().toLowerCase();
-  if (!trimmed) {
-    return true;
-  }
-
-  return [
+  return matchesSearchText([
     item.receiptNumber,
     item.bill,
     item.patientName,
+    item.firstName,
+    item.otherNames,
+    item.lastName,
     item.dentistName,
     item.chargeSummary,
     item.paymentMethod,
     item.status,
     item.totalAmountLabel,
     item.remainingAmountLabel,
-  ].join(' ').toLowerCase().includes(trimmed);
+  ].join(' '), query);
 }
 
 function createExcelBlob(title, columns, rows) {
@@ -403,21 +397,16 @@ function FrontdeskBillingModal({ isOpen, onClose, onSubmit, patients }) {
   }, [isOpen]);
 
   const filteredPatients = (patients ?? []).filter((item) => {
-    const trimmed = search.trim().toLowerCase();
-    if (!trimmed) {
-      return true;
-    }
-
-    return [
+    return matchesSearchText([
       item.patientName,
+      item.firstName,
+      item.otherNames,
+      item.lastName,
       item.folderId,
       item.oldFolderId,
       item.phone,
       item.visitReason,
-    ]
-      .join(' ')
-      .toLowerCase()
-      .includes(trimmed);
+    ].join(' '), search);
   });
 
   const selectedPatient = filteredPatients.find((item) => String(item.id) === String(selectedPatientId))

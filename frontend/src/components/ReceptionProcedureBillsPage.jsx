@@ -5,6 +5,7 @@ import {
   ReceiptPreviewModal,
   printThermalReceipt,
 } from './ReceptionPaymentsPage';
+import { matchesSearchText } from '../lib/search';
 
 function formatCurrency(value) {
   return `GHS ${Number(value ?? 0).toLocaleString(undefined, {
@@ -14,21 +15,19 @@ function formatCurrency(value) {
 }
 
 function matchesSearch(item, query) {
-  const trimmed = String(query ?? '').trim().toLowerCase();
-  if (!trimmed) {
-    return true;
-  }
-
-  return [
+  return matchesSearchText([
     item.bill,
     item.patientName,
+    item.firstName,
+    item.otherNames,
+    item.lastName,
     item.chargeSummary,
     item.dentistName,
     item.status,
     item.notes,
     item.balanceLabel,
     item.amountLabel,
-  ].join(' ').toLowerCase().includes(trimmed);
+  ].join(' '), query);
 }
 
 const ORTHODONTIC_PROCEDURES = [
@@ -234,18 +233,16 @@ function OrthodonticTrackerModal({
   ), [bills, search]);
 
   const filteredPatients = React.useMemo(() => {
-    const trimmed = patientSearch.trim().toLowerCase();
     return (patients ?? []).filter((item) => {
-      if (!trimmed) {
-        return true;
-      }
-
-      return [
+      return matchesSearchText([
         item.patientName,
+        item.firstName,
+        item.otherNames,
+        item.lastName,
         item.folderId,
         item.oldFolderId,
         item.phone,
-      ].join(' ').toLowerCase().includes(trimmed);
+      ].join(' '), patientSearch);
     }).slice(0, 12);
   }, [patientSearch, patients]);
 

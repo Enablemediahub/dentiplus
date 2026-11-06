@@ -1,5 +1,6 @@
 import React from 'react';
 import { PortalIcon } from './PortalIcon';
+import { matchesSearchText } from '../lib/search';
 
 function formatCurrency(value) {
   return `GHS ${Number(value ?? 0).toLocaleString(undefined, {
@@ -247,15 +248,13 @@ export function PastReceiptsPage({ billing, onLoadReceipt }) {
   const history = billing?.history ?? [];
 
   const filteredHistory = history.filter((item) => {
-    const trimmed = search.trim().toLowerCase();
-    if (!trimmed) {
-      return true;
-    }
-
-    return [
+    return matchesSearchText([
       item.receiptNumber,
       item.bill,
       item.patientName,
+      item.firstName,
+      item.otherNames,
+      item.lastName,
       item.dentistName,
       item.chargeSummary,
       item.paymentMethod,
@@ -263,7 +262,7 @@ export function PastReceiptsPage({ billing, onLoadReceipt }) {
       item.totalAmountLabel,
       item.remainingAmountLabel,
       item.dateLabel,
-    ].join(' ').toLowerCase().includes(trimmed);
+    ].join(' '), search);
   });
 
   const totalPages = Math.max(1, Math.ceil(filteredHistory.length / rowsPerPage));

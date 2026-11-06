@@ -1,5 +1,6 @@
 import React from 'react';
 import { PortalIcon } from './PortalIcon';
+import { matchesSearchText } from '../lib/search';
 
 function formatCurrency(value) {
   return `GHS ${Number(value ?? 0).toLocaleString(undefined, {
@@ -17,12 +18,7 @@ function clampPage(page, totalPages) {
 }
 
 function matchesProcedureSearch(item, query) {
-  const trimmed = query.trim().toLowerCase();
-  if (!trimmed) {
-    return true;
-  }
-
-  return [
+  return matchesSearchText([
     item.name,
     item.charge,
     item.minCharge,
@@ -30,7 +26,7 @@ function matchesProcedureSearch(item, query) {
     formatCurrency(item.charge),
     formatCurrency(item.minCharge),
     formatCurrency(item.maxCharge),
-  ].join(' ').toLowerCase().includes(trimmed);
+  ].join(' '), query);
 }
 
 function ProcedureModal({ deleting, feedback, feedbackType, form, isOpen, onChange, onClose, onDelete, onSubmit, saving }) {

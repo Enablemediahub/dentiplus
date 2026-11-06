@@ -1,6 +1,7 @@
 import React from 'react';
 import { AppointmentBookingModal } from './ReceptionDeskModals';
 import { PortalIcon } from './PortalIcon';
+import { matchesSearchText } from '../lib/search';
 
 function clampPage(page, totalPages) {
   if (totalPages <= 0) {
@@ -32,13 +33,11 @@ function formatPhoneNumber(value) {
 }
 
 function matchesSearch(item, query) {
-  const trimmed = query.trim().toLowerCase();
-  if (!trimmed) {
-    return true;
-  }
-
-  return [
+  return matchesSearchText([
     item.patientName,
+    item.firstName,
+    item.otherNames,
+    item.lastName,
     item.patient,
     item.procedure,
     item.dentistName,
@@ -48,7 +47,7 @@ function matchesSearch(item, query) {
     item.time,
     item.status,
     item.branch,
-  ].join(' ').toLowerCase().includes(trimmed);
+  ].join(' '), query);
 }
 
 function appointmentDateTime(item) {

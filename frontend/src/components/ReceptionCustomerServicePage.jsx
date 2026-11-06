@@ -1,5 +1,6 @@
 import React from 'react';
 import { PortalIcon } from './PortalIcon';
+import { matchesSearchText } from '../lib/search';
 
 function clampPage(page, totalPages) {
   if (totalPages <= 0) {
@@ -260,15 +261,18 @@ export function ReceptionCustomerServicePage({
   const queueItems = data?.[queueType] ?? [];
   const smsLogs = data?.smsLogs ?? [];
 
-  const filteredQueueItems = queueItems.filter((item) => [
+  const filteredQueueItems = queueItems.filter((item) => matchesSearchText([
     item.patientName,
+    item.firstName,
+    item.otherNames,
+    item.lastName,
     item.phone,
     item.email,
     item.queueLabel,
     item.status,
     item.note,
     item.followUpStatus,
-  ].join(' ').toLowerCase().includes(search.trim().toLowerCase()));
+  ].join(' '), search));
 
   const totalPages = Math.max(1, Math.ceil(filteredQueueItems.length / rowsPerPage));
   const currentPage = clampPage(page, totalPages);

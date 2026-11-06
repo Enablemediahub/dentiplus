@@ -1,5 +1,6 @@
 import React from 'react';
 import { PortalIcon } from './PortalIcon';
+import { matchesSearchText } from '../lib/search';
 
 function clampPage(page, totalPages) {
   if (totalPages <= 0) {
@@ -10,20 +11,18 @@ function clampPage(page, totalPages) {
 }
 
 function matchesSearch(item, query) {
-  const trimmed = query.trim().toLowerCase();
-  if (!trimmed) {
-    return true;
-  }
-
-  return [
+  return matchesSearchText([
     item.name,
+    item.firstName,
+    item.otherNames,
+    item.lastName,
     item.username,
     item.email,
     item.phone,
     item.role,
     item.branch,
     item.status,
-  ].join(' ').toLowerCase().includes(trimmed);
+  ].join(' '), query);
 }
 
 function createStaffForm(item) {

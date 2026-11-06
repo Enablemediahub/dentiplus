@@ -2,6 +2,7 @@ import React from 'react';
 import { DateInputField } from './DateInputField';
 import { PortalIcon } from './PortalIcon';
 import { displayDateToIso, formatDateRangeLabel, isoToDisplayDate, normalizeDateEntry } from '../lib/dateInput';
+import { matchesSearchText } from '../lib/search';
 
 function clampPage(page, totalPages) {
   if (totalPages <= 0) {
@@ -121,19 +122,14 @@ function openPrintableReport(title, subtitle, columns, rows, totals = []) {
 }
 
 function matchesSearch(item, query) {
-  const trimmed = query.trim().toLowerCase();
-  if (!trimmed) {
-    return true;
-  }
-
-  return [
+  return matchesSearchText([
     item.reference,
     item.detail,
     item.category,
     item.notes,
     item.amountLabel,
     item.expenseDateLabel,
-  ].join(' ').toLowerCase().includes(trimmed);
+  ].join(' '), query);
 }
 
 function ExpenseModal({ deleting, feedback, form, isOpen, onChange, onClose, onDelete, onSubmit, saving }) {

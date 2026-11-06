@@ -1,6 +1,7 @@
 import React from 'react';
 import { AppointmentBookingModal } from './ReceptionDeskModals';
 import { PortalIcon } from './PortalIcon';
+import { matchesSearchText } from '../lib/search';
 
 function formatPhoneNumber(value) {
   const digits = String(value ?? '').replace(/\D/g, '');
@@ -26,6 +27,9 @@ function formatPhoneNumber(value) {
 function matchesSearch(item, query) {
   const haystack = [
     item.patientName,
+    item.firstName,
+    item.otherNames,
+    item.lastName,
     item.patient,
     item.procedure,
     item.clinician,
@@ -35,7 +39,7 @@ function matchesSearch(item, query) {
     .join(' ')
     .toLowerCase();
 
-  return haystack.includes(query.toLowerCase());
+  return matchesSearchText(haystack, query);
 }
 
 function appointmentDateTime(item) {

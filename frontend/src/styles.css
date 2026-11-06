@@ -1700,6 +1700,10 @@ button {
   margin-bottom: 20px;
 }
 
+.reception-toolbar-card .reception-filter-strip + .frontdesk-command-grid {
+  margin-top: 20px;
+}
+
 .reception-filter-strip {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -2841,6 +2845,22 @@ button {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+}
+
+.assign-patient-modal .form-grid > .field-block {
+  min-width: 0;
+}
+
+.assign-patient-modal .form-grid input,
+.assign-patient-modal .form-grid select {
+  width: 100%;
+  min-width: 0;
+}
+
+.assign-patient-submit,
+.assign-patient-open {
+  padding: 10px 14px;
+  font-size: 0.92rem;
 }
 
 .workspace-card__actions {

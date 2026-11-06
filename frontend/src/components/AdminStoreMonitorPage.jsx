@@ -1,5 +1,6 @@
 import React from 'react';
 import { PortalIcon } from './PortalIcon';
+import { matchesSearchText } from '../lib/search';
 
 function formatCurrency(value) {
   return `GHS ${Number(value ?? 0).toLocaleString(undefined, {
@@ -17,12 +18,7 @@ function clampPage(page, totalPages) {
 }
 
 function matchesSaleSearch(sale, query) {
-  const trimmed = query.trim().toLowerCase();
-  if (!trimmed) {
-    return true;
-  }
-
-  return [
+  return matchesSearchText([
     sale.saleId,
     sale.totalAmountLabel,
     sale.itemCountLabel,
@@ -32,23 +28,18 @@ function matchesSaleSearch(sale, query) {
     sale.createdAtLabel,
     sale.createdDateLabel,
     sale.branch,
-  ].join(' ').toLowerCase().includes(trimmed);
+  ].join(' '), query);
 }
 
 function matchesInventorySearch(item, query) {
-  const trimmed = query.trim().toLowerCase();
-  if (!trimmed) {
-    return true;
-  }
-
-  return [
+  return matchesSearchText([
     item.name,
     item.description,
     item.priceLabel,
     item.stockLabel,
     item.status,
     item.branch,
-  ].join(' ').toLowerCase().includes(trimmed);
+  ].join(' '), query);
 }
 
 export function AdminStoreMonitorPage({ data, onNavigate }) {

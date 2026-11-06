@@ -1,5 +1,6 @@
 import React from 'react';
 import { PortalIcon } from './PortalIcon';
+import { matchesSearchText } from '../lib/search';
 
 function formatPhoneNumber(value) {
   const digits = String(value ?? '').replace(/\D/g, '');
@@ -23,23 +24,18 @@ function formatPhoneNumber(value) {
 }
 
 function matchesSearch(item, query) {
-  const trimmed = query.trim().toLowerCase();
-  if (!trimmed) {
-    return true;
-  }
-
-  return [
+  return matchesSearchText([
     item.patientName,
+    item.firstName,
+    item.otherNames,
+    item.lastName,
     item.folderId,
     item.oldFolderId,
     item.phone,
     item.visitReason,
     item.dentistName,
     item.status,
-  ]
-    .join(' ')
-    .toLowerCase()
-    .includes(trimmed);
+  ].join(' '), query);
 }
 
 function clampPage(page, totalPages) {
@@ -105,7 +101,7 @@ function AssignPatientModal({ candidatePatients, dentists, isOpen, onClose, onSu
 
   return (
     <div className="workspace-modal-backdrop" onClick={onClose} role="presentation">
-      <div className="workspace-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
+      <div className="workspace-modal assign-patient-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
         <div className="workspace-modal__header">
           <div>
             <p className="eyebrow eyebrow--modal">Assign patient</p>
@@ -178,7 +174,7 @@ function AssignPatientModal({ candidatePatients, dentists, isOpen, onClose, onSu
           {feedback ? <p className="form-error">{feedback}</p> : null}
 
           <div className="workspace-card__actions">
-            <button className="primary-button" disabled={saving} type="submit">
+            <button className="primary-button assign-patient-submit" disabled={saving} type="submit">
               {saving ? 'Assigning patient...' : 'Assign patient'}
             </button>
           </div>
@@ -238,7 +234,7 @@ export function ReceptionAssignPatientPage({ assignments, onAssignPatient, onCom
             <h3>Assign patients into the dentist queue</h3>
             <p>Based on the ASDental receptionist flow: choose a patient, assign a dentist, and keep the live waiting list tidy.</p>
           </div>
-          <button className="primary-button" onClick={() => setIsModalOpen(true)} type="button">
+          <button className="primary-button assign-patient-open" onClick={() => setIsModalOpen(true)} type="button">
             Assign patient
           </button>
         </div>

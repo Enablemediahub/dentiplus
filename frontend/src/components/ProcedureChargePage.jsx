@@ -1,5 +1,6 @@
 import React from 'react';
 import { PortalIcon } from './PortalIcon';
+import { matchesSearchText } from '../lib/search';
 
 function formatPhoneNumber(value) {
   const digits = String(value ?? '').replace(/\D/g, '');
@@ -30,41 +31,31 @@ function formatCurrency(value) {
 }
 
 function matchesQueueSearch(item, query) {
-  const trimmed = query.trim().toLowerCase();
-  if (!trimmed) {
-    return true;
-  }
-
-  return [
+  return matchesSearchText([
     item.patientName,
+    item.firstName,
+    item.otherNames,
+    item.lastName,
     item.folderId,
     item.phone,
     item.visitReason,
     item.assignmentTime,
-  ]
-    .join(' ')
-    .toLowerCase()
-    .includes(trimmed);
+  ].join(' '), query);
 }
 
 function matchesPendingSearch(item, query) {
-  const trimmed = query.trim().toLowerCase();
-  if (!trimmed) {
-    return true;
-  }
-
-  return [
+  return matchesSearchText([
     item.patientName,
+    item.firstName,
+    item.otherNames,
+    item.lastName,
     item.procedureSummary,
     item.amountLabel,
     item.remainingAmountLabel,
     item.status,
     item.notes,
     item.dateLabel,
-  ]
-    .join(' ')
-    .toLowerCase()
-    .includes(trimmed);
+  ].join(' '), query);
 }
 
 function clampPage(page, totalPages) {

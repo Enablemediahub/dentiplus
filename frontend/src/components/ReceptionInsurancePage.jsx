@@ -2,6 +2,7 @@ import React from 'react';
 import { DateInputField } from './DateInputField';
 import { PortalIcon } from './PortalIcon';
 import { displayDateToIso, isoToDisplayDate, normalizeDateEntry } from '../lib/dateInput';
+import { matchesSearchText } from '../lib/search';
 
 function clampPage(page, totalPages) {
   if (totalPages <= 0) {
@@ -16,21 +17,19 @@ function normalizeLeadingUppercase(value) {
 }
 
 function matchesSearch(item, query) {
-  const trimmed = query.trim().toLowerCase();
-  if (!trimmed) {
-    return true;
-  }
-
-  return [
+  return matchesSearchText([
     item.bill,
     item.patientName,
+    item.firstName,
+    item.otherNames,
+    item.lastName,
     item.insuranceType,
     item.company,
     item.insuranceNumber,
     item.insuranceCategory,
     item.status,
     item.billTypeLabel,
-  ].join(' ').toLowerCase().includes(trimmed);
+  ].join(' '), query);
 }
 
 function InsuranceCatalogModal({ feedback, isEditMode, isOpen, name, onChange, onClose, onSubmit, saving }) {

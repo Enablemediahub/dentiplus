@@ -1,5 +1,6 @@
 import React from 'react';
 import { PortalIcon } from './PortalIcon';
+import { matchesSearchText } from '../lib/search';
 
 function clampPage(page, totalPages) {
   if (totalPages <= 0) {
@@ -10,12 +11,7 @@ function clampPage(page, totalPages) {
 }
 
 function matchesSearch(item, query) {
-  const trimmed = query.trim().toLowerCase();
-  if (!trimmed) {
-    return true;
-  }
-
-  return [
+  return matchesSearchText([
     item.actionLabel,
     item.entityLabel,
     item.actorName,
@@ -29,7 +25,7 @@ function matchesSearch(item, query) {
     item.lastTransactionLabel,
     item.latestBillingReference,
     item.patientContextLabel,
-  ].join(' ').toLowerCase().includes(trimmed);
+  ].join(' '), query);
 }
 
 function formatCurrency(value) {

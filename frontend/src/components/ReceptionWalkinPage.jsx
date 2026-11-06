@@ -1,6 +1,7 @@
 import React from 'react';
 import { AppointmentBookingModal, WalkinRegistrationModal } from './ReceptionDeskModals';
 import { PortalIcon } from './PortalIcon';
+import { matchesSearchText } from '../lib/search';
 
 function formatPhoneNumber(value) {
   const digits = String(value ?? '').replace(/\D/g, '');
@@ -24,23 +25,18 @@ function formatPhoneNumber(value) {
 }
 
 function searchPatients(items, query) {
-  const trimmed = query.trim().toLowerCase();
-  if (!trimmed) {
-    return items;
-  }
-
   return items.filter((item) =>
-    [
+    matchesSearchText([
       item.patientName,
+      item.firstName,
+      item.otherNames,
+      item.lastName,
       item.folderId,
       item.oldFolderId,
       item.phone,
       item.visitReason,
       item.status,
-    ]
-      .join(' ')
-      .toLowerCase()
-      .includes(trimmed)
+    ].join(' '), query)
   );
 }
 

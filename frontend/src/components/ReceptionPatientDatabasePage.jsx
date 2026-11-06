@@ -2,6 +2,7 @@ import React from 'react';
 import { DateInputField } from './DateInputField';
 import { PortalIcon } from './PortalIcon';
 import { displayDateToIso, isoToDisplayDate, normalizeDateEntry } from '../lib/dateInput';
+import { matchesSearchText } from '../lib/search';
 
 function formatPhoneNumber(value) {
   const digits = String(value ?? '').replace(/\D/g, '');
@@ -37,13 +38,11 @@ function normalizeLeadingUppercase(value) {
 }
 
 function matchesSearch(patient, query) {
-  const trimmed = query.trim().toLowerCase();
-  if (!trimmed) {
-    return true;
-  }
-
-  return [
+  return matchesSearchText([
     patient.patientName,
+    patient.firstName,
+    patient.otherNames,
+    patient.lastName,
     patient.folderId,
     patient.oldFolderId,
     patient.phone,
@@ -53,10 +52,7 @@ function matchesSearch(patient, query) {
     patient.visitReason,
     patient.lastVisitLabel,
     patient.status,
-  ]
-    .join(' ')
-    .toLowerCase()
-    .includes(trimmed);
+  ].join(' '), query);
 }
 
 function matchesFilters(patient, statusFilter, typeFilter) {
