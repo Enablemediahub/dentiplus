@@ -1,9 +1,47 @@
-Re-optimizing dependencies because lockfile has changed
 
-  VITE v5.4.21  ready in 530 ms
+  VITE v5.4.21  ready in 117 ms
 
   ➜  Local:   http://localhost:5176/
-  ➜  Network: http://192.168.137.1:5176/
-  ➜  Network: http://192.168.100.4:5176/
-  ➜  Network: http://172.21.208.1:5176/
-  ➜  Network: http://172.18.112.1:5176/
+  ➜  Network: http://192.168.100.79:5176/
+10:11:35 AM [vite] page reload src/components/ReceptionPaymentsPage.jsx
+10:11:55 AM [vite] hmr update /src/styles.css
+10:14:46 AM [vite] hmr update /src/styles.css
+10:16:43 AM [vite] hmr update /src/styles.css
+10:17:55 AM [vite] page reload src/components/ReceptionWalkinPage.jsx
+10:18:03 AM [vite] hmr update /src/styles.css
+10:20:41 AM [vite] page reload src/components/ReceptionWalkinPage.jsx
+10:21:16 AM [vite] page reload src/components/ReceptionPatientDatabasePage.jsx
+10:21:46 AM [vite] page reload src/components/ReceptionInsurancePage.jsx
+10:21:58 AM [vite] page reload src/components/PastReceiptsPage.jsx
+10:23:36 AM [vite] hmr update /src/styles.css
+10:23:50 AM [vite] hmr update /src/styles.css
+10:26:50 AM [vite] hmr update /src/styles.css
+10:36:14 AM [vite] page reload src/components/ReceptionExpensesPage.jsx
+10:36:14 AM [vite] page reload src/components/ReceptionInsurancePage.jsx
+10:36:14 AM [vite] page reload src/components/ReceptionPatientDatabasePage.jsx
+10:36:14 AM [vite] page reload src/components/AdminDeletionAuditPage.jsx
+10:36:14 AM [vite] page reload src/components/ReceptionCustomerServicePage.jsx
+10:36:14 AM [vite] page reload src/components/AdminProcedureChargesPage.jsx
+10:36:14 AM [vite] page reload src/components/AdminStaffPage.jsx
+10:36:14 AM [vite] page reload src/components/AdminAppointmentsPage.jsx
+10:36:39 AM [vite] page reload src/components/AdminStoreMonitorPage.jsx
+10:36:39 AM [vite] page reload src/components/ReceptionStorePage.jsx
+10:36:39 AM [vite] page reload src/components/PastReceiptsPage.jsx
+10:36:39 AM [vite] page reload src/components/ReceptionAssignPatientPage.jsx
+10:36:39 AM [vite] page reload src/components/ReceptionProcedureBillsPage.jsx
+10:37:01 AM [vite] page reload src/components/ReceptionAppointmentsPage.jsx
+10:37:01 AM [vite] page reload src/components/DentistPatientsPage.jsx
+10:37:01 AM [vite] page reload src/components/ProcedureChargePage.jsx
+10:37:22 AM [vite] page reload src/components/ReceptionPaymentsPage.jsx
+10:37:22 AM [vite] page reload src/components/AdminDatabasePage.jsx
+10:37:41 AM [vite] hmr update /src/styles.css
+10:37:52 AM [vite] page reload src/components/AdminDatabasePage.jsx
+10:38:05 AM [vite] page reload src/components/ReceptionProcedureBillsPage.jsx
+10:39:53 AM [vite] page reload src/components/DentistPatientsPage.jsx
+10:40:43 AM [vite] page reload src/components/DentistPatientsPage.jsx
+11:05:59 AM [vite] page reload src/components/ProcedureChargePage.jsx
+11:06:10 AM [vite] hmr update /src/styles.css
+11:06:49 AM [vite] page reload src/components/ProcedureChargePage.jsx
+11:06:55 AM [vite] page reload src/components/ProcedureChargePage.jsx
+11:06:55 AM [vite] page reload src/components/AdminProcedureChargesPage.jsx
+11:07:31 AM [vite] page reload src/components/ProcedureChargePage.jsx

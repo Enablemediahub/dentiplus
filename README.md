@@ -25,6 +25,15 @@ dentiplus/
 5. Start the backend API from the project root:
    - `npm run backend`
 
+### macOS start/stop scripts
+
+After installing the frontend dependencies, run these from the project root:
+
+- Start both servers in the background: `bash ./start-dentiplus.sh`
+- Stop both servers: `bash ./stop-dentiplus.sh`
+
+The scripts write logs to `run-logs/`. They require Node.js, PHP, and the frontend dependencies to be installed.
+
 Default local URLs:
 
 - Frontend: `http://localhost:5176`
