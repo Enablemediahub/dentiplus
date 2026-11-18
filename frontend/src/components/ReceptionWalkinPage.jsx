@@ -1,6 +1,8 @@
 import React from 'react';
 import { AppointmentBookingModal, WalkinRegistrationModal } from './ReceptionDeskModals';
+import { DateInputField } from './DateInputField';
 import { PortalIcon } from './PortalIcon';
+import { displayDateToIso, normalizeDateEntry } from '../lib/dateInput';
 import { matchesSearchText } from '../lib/search';
 
 function formatPhoneNumber(value) {
@@ -24,7 +26,7 @@ function formatPhoneNumber(value) {
   return digits;
 }
 
-function searchPatients(items, query) {
+function searchPatients(items, query, startDate, endDate) {
   return items.filter((item) =>
     matchesSearchText([
       item.patientName,
@@ -37,7 +39,21 @@ function searchPatients(items, query) {
       item.visitReason,
       item.status,
     ].join(' '), query)
+    && matchesPatientDate(item.createdAt, startDate, endDate)
   );
+}
+
+function dateOnly(value) {
+  const text = String(value ?? '').trim();
+  return /^\d{2}\/\d{2}\/\d{4}$/.test(text) ? displayDateToIso(text) : text.slice(0, 10);
+}
+
+function matchesPatientDate(value, startDate, endDate) {
+  if (!startDate && !endDate) return true;
+  const date = dateOnly(value);
+  const start = dateOnly(startDate);
+  const end = dateOnly(endDate);
+  return Boolean(date) && (!startDate || (start && date >= start)) && (!endDate || (end && date <= end));
 }
 
 function clampPage(page, totalPages) {
@@ -186,10 +202,12 @@ export function ReceptionWalkinPage({
   const [appointmentPatient, setAppointmentPatient] = React.useState(null);
   const [assignPatient, setAssignPatient] = React.useState(null);
   const [rowsPerPage, setRowsPerPage] = React.useState(15);
+  const [startDate, setStartDate] = React.useState('');
+  const [endDate, setEndDate] = React.useState('');
   const [page, setPage] = React.useState(1);
 
   const allPatients = patients?.items ?? [];
-  const filteredPatients = searchPatients(allPatients, search);
+  const filteredPatients = searchPatients(allPatients, search, startDate, endDate);
   const dentists = assignments?.dentists ?? appointments?.dentists ?? [];
   const totalPages = Math.max(1, Math.ceil(filteredPatients.length / rowsPerPage));
   const currentPage = clampPage(page, totalPages);
@@ -200,7 +218,7 @@ export function ReceptionWalkinPage({
 
   React.useEffect(() => {
     setPage(1);
-  }, [search, rowsPerPage]);
+  }, [search, startDate, endDate, rowsPerPage]);
 
   React.useEffect(() => {
     setPage((current) => clampPage(current, totalPages));
@@ -235,7 +253,7 @@ export function ReceptionWalkinPage({
         {successMessage ? <p className="form-success">{successMessage}</p> : null}
 
         <div className="reception-filter-strip">
-          <label className="field-block reception-inline-field reception-search-field">
+          <label className="field-block reception-inline-field reception-search-field reception-walkin-search">
             <span>Search registered patients</span>
             <PortalIcon className="reception-search-icon" name="search" />
             <input
@@ -246,6 +264,14 @@ export function ReceptionWalkinPage({
             />
           </label>
           <label className="field-block reception-inline-field">
+            <span>Registered from</span>
+            <DateInputField name="registered_from" onChange={(event) => setStartDate(normalizeDateEntry(event.target.value))} placeholder="dd/mm/yyyy" value={startDate} />
+          </label>
+          <label className="field-block reception-inline-field">
+            <span>Registered to</span>
+            <DateInputField name="registered_to" onChange={(event) => setEndDate(normalizeDateEntry(event.target.value))} placeholder="dd/mm/yyyy" value={endDate} />
+          </label>
+          <label className="field-block reception-inline-field">
             <span>Rows per page</span>
             <select value={rowsPerPage} onChange={(event) => setRowsPerPage(Number(event.target.value))}>
               <option value={15}>15</option>
@@ -253,6 +279,9 @@ export function ReceptionWalkinPage({
               <option value={45}>45</option>
             </select>
           </label>
+          <button className="payments-ledger-reset" onClick={() => { setSearch(''); setStartDate(''); setEndDate(''); setRowsPerPage(15); }} type="button">
+            Reset filters
+          </button>
         </div>
       </section>
 

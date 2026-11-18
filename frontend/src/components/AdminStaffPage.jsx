@@ -479,6 +479,7 @@ export function AdminStaffPage({
               <option value={45}>45</option>
             </select>
           </label>
+          <button className="payments-ledger-reset" onClick={() => { setSearch(''); setRoleFilter('all'); setStatusFilter('all'); setRowsPerPage(15); }} type="button">Reset filters</button>
         </div>
       </section>
 

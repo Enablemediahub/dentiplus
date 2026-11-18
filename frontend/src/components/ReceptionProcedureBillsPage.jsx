@@ -337,6 +337,7 @@ function OrthodonticTrackerModal({
                   ))}
                 </select>
               </label>
+              <button className="payments-ledger-reset" onClick={() => { setPatientSearch(''); setSelectedPatientId(''); }} type="button">Reset filters</button>
             </div>
             <div className="form-grid">
               <label className="field-block">
@@ -379,6 +380,7 @@ function OrthodonticTrackerModal({
                 <PortalIcon className="reception-search-icon" name="search" />
                 <input onChange={(event) => setSearch(event.target.value)} placeholder="Bill, patient, payment, receptionist..." type="text" value={search} />
               </label>
+              <button className="payments-ledger-reset" onClick={() => setSearch('')} type="button">Reset filters</button>
             </div>
 
             <div className="table-wrap">
@@ -528,6 +530,7 @@ export function ReceptionProcedureBillsPage({
               value={search}
             />
           </label>
+          <button className="payments-ledger-reset" onClick={() => setSearch('')} type="button">Reset filters</button>
         </div>
       </section>
 

@@ -515,6 +515,7 @@ export function ReceptionStorePage({ data, onCreateStoreItem, onDeleteStoreItem,
               <option value={45}>45</option>
             </select>
           </label>
+          <button className="payments-ledger-reset" onClick={() => { setSearch(''); setStockFilter('all'); setRowsPerPage(15); }} type="button">Reset filters</button>
         </div>
       </section>
 
@@ -600,6 +601,7 @@ export function ReceptionStorePage({ data, onCreateStoreItem, onDeleteStoreItem,
               <option value={40}>40</option>
             </select>
           </label>
+          <button className="payments-ledger-reset" onClick={() => { setSalesSearch(''); setSalesRowsPerPage(10); }} type="button">Reset filters</button>
         </div>
         <div className="table-wrap">
           <table className="data-table">

@@ -85,6 +85,7 @@ export function AdminDeletionAuditPage({ data }) {
               <option value={45}>45</option>
             </select>
           </label>
+          <button className="payments-ledger-reset" onClick={() => { setSearch(''); setRowsPerPage(15); }} type="button">Reset filters</button>
         </div>
 
         <div className="frontdesk-command-grid">

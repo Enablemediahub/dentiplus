@@ -114,9 +114,19 @@ function ProcedureBillingModal({
   const subjectReason = patient?.visitReason ?? '';
 
   function updateRow(index, field, value) {
-    setRows((current) => current.map((row, rowIndex) => (
-      rowIndex === index ? { ...row, [field]: value } : row
-    )));
+    setRows((current) => current.map((row, rowIndex) => {
+      if (rowIndex !== index) return row;
+      if (field === 'procedure_id') {
+        const selectedProcedure = procedures.find((item) => item.id === Number(value));
+        return {
+          ...row,
+          procedure_id: value,
+          amount: selectedProcedure ? String(selectedProcedure.charge ?? '') : '',
+          topup_notes: '',
+        };
+      }
+      return { ...row, [field]: value };
+    }));
   }
 
   function addRow() {
@@ -193,7 +203,7 @@ function ProcedureBillingModal({
                   <div>
                     <h4>Procedure line {index + 1}</h4>
                     <div className="workspace-record-meta">
-                      {procedure ? <span className="workspace-edited-chip">Allowed range {formatCurrency(procedure.minCharge)} to {formatCurrency(procedure.maxCharge)}</span> : null}
+                      {procedure ? <span className="workspace-edited-chip">Standard {formatCurrency(procedure.charge)} · approved range {formatCurrency(procedure.minCharge)} to {formatCurrency(procedure.maxCharge)}</span> : null}
                     </div>
                   </div>
                   {rows.length > 1 ? (
@@ -203,30 +213,31 @@ function ProcedureBillingModal({
                   ) : null}
                 </div>
 
-                <div className="form-grid">
-                  <label className="field-block">
+                <div className="form-grid procedure-charge-line-grid">
+                  <label className="field-block procedure-charge-field">
                     <span>Procedure</span>
                     <select required value={row.procedure_id} onChange={(event) => updateRow(index, 'procedure_id', event.target.value)}>
                       <option value="">Choose procedure</option>
                       {procedures.map((item) => (
                         <option key={item.id} value={item.id}>
-                          {item.name} | {formatCurrency(item.minCharge)} - {formatCurrency(item.maxCharge)}
+                          {item.name} | Standard {formatCurrency(item.charge)} | {formatCurrency(item.minCharge)} - {formatCurrency(item.maxCharge)}
                         </option>
                       ))}
                     </select>
                   </label>
 
-                  <label className="field-block">
+                  <label className="field-block procedure-charge-field">
                     <span>Amount charged</span>
                     <input
-                      min="0"
+                      min={procedure?.minCharge ?? 0}
                       onChange={(event) => updateRow(index, 'amount', event.target.value)}
-                      placeholder="0.00"
+                      placeholder={procedure ? Number(procedure.charge ?? 0).toFixed(2) : '0.00'}
                       required
                       step="0.01"
                       type="number"
                       value={row.amount}
                     />
+                    {procedure ? <small className="procedure-charge-default">Standard price: {formatCurrency(procedure.charge)}. Adjust as needed within the approved range.</small> : null}
                   </label>
 
                   <label className="field-block field-block--wide">
@@ -296,6 +307,7 @@ export function ProcedureChargePage({
   const [selectedPendingBill, setSelectedPendingBill] = React.useState(null);
   const [deletingBillingId, setDeletingBillingId] = React.useState(null);
   const [refreshing, setRefreshing] = React.useState(false);
+  const [refreshWarning, setRefreshWarning] = React.useState('');
   const successMessageRef = React.useRef(null);
 
   const queueItems = data?.queueItems ?? [];
@@ -345,9 +357,20 @@ export function ProcedureChargePage({
     setRefreshing(true);
     try {
       await onRefreshProcedureCharges();
+      setRefreshWarning('');
     } finally {
       setRefreshing(false);
     }
+  }
+
+  async function openChargeModal(item) {
+    setSelectedPatient(item);
+    try {
+      await handleRefresh();
+    } catch (error) {
+      setRefreshWarning(`Could not refresh the approved price list. ${error.message}`);
+    }
+    setIsCreateModalOpen(true);
   }
 
   function handleProcedureChargeSuccess(response) {
@@ -423,6 +446,7 @@ export function ProcedureChargePage({
               <option value={30}>30</option>
             </select>
           </label>
+          <button className="payments-ledger-reset" onClick={() => { setSearch(''); setPendingSearch(''); setRowsPerPage(15); setPendingRowsPerPage(10); }} type="button">Reset filters</button>
         </div>
 
         <div className="frontdesk-command-grid">
@@ -464,6 +488,7 @@ export function ProcedureChargePage({
             {successMessage}
           </p>
         ) : null}
+        {refreshWarning ? <p className="form-error">{refreshWarning}</p> : null}
         <div className="table-wrap">
           <table className="data-table">
             <thead>
@@ -489,8 +514,7 @@ export function ProcedureChargePage({
                     <button
                       className="clinical-workspace-button secondary-action--compact"
                       onClick={() => {
-                        setSelectedPatient(item);
-                        setIsCreateModalOpen(true);
+                        void openChargeModal(item);
                       }}
                       type="button"
                     >

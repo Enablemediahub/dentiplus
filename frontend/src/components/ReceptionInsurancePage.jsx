@@ -137,6 +137,8 @@ export function ReceptionInsurancePage({ data, onCreateInsuranceName, onDeleteIn
   const [search, setSearch] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState('all');
   const [typeFilter, setTypeFilter] = React.useState('all');
+  const [startDate, setStartDate] = React.useState('');
+  const [endDate, setEndDate] = React.useState('');
   const [page, setPage] = React.useState(1);
   const [rowsPerPage, setRowsPerPage] = React.useState(15);
   const [catalogOpen, setCatalogOpen] = React.useState(false);
@@ -156,7 +158,11 @@ export function ReceptionInsurancePage({ data, onCreateInsuranceName, onDeleteIn
   const filteredItems = items.filter((item) => {
     const statusMatch = statusFilter === 'all' || String(item.status ?? '').toLowerCase().replace(/\s+/g, '_') === statusFilter;
     const typeMatch = typeFilter === 'all' || String(item.billTypeLabel ?? '').toLowerCase().includes(typeFilter === 'frontdesk_fees' ? 'consultation' : 'procedure');
-    return statusMatch && typeMatch && matchesSearch(item, search);
+    const date = String(item.createdAt ?? '').slice(0, 10);
+    const from = displayDateToIso(startDate);
+    const to = displayDateToIso(endDate);
+    const dateMatch = (!startDate || (from && date >= from)) && (!endDate || (to && date <= to));
+    return dateMatch && statusMatch && typeMatch && matchesSearch(item, search);
   });
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / rowsPerPage));
   const currentPage = clampPage(page, totalPages);
@@ -164,7 +170,7 @@ export function ReceptionInsurancePage({ data, onCreateInsuranceName, onDeleteIn
 
   React.useEffect(() => {
     setPage(1);
-  }, [search, statusFilter, typeFilter, rowsPerPage]);
+  }, [search, statusFilter, typeFilter, startDate, endDate, rowsPerPage]);
 
   React.useEffect(() => {
     setPage((current) => clampPage(current, totalPages));
@@ -406,6 +412,14 @@ export function ReceptionInsurancePage({ data, onCreateInsuranceName, onDeleteIn
             </select>
           </label>
           <label className="field-block reception-inline-field">
+            <span>From</span>
+            <DateInputField name="start_date" onChange={(event) => setStartDate(normalizeDateEntry(event.target.value))} placeholder="dd/mm/yyyy" value={startDate} />
+          </label>
+          <label className="field-block reception-inline-field">
+            <span>To</span>
+            <DateInputField name="end_date" onChange={(event) => setEndDate(normalizeDateEntry(event.target.value))} placeholder="dd/mm/yyyy" value={endDate} />
+          </label>
+          <label className="field-block reception-inline-field">
             <span>Rows per page</span>
             <select onChange={(event) => setRowsPerPage(Number(event.target.value))} value={rowsPerPage}>
               <option value={15}>15</option>
@@ -413,6 +427,7 @@ export function ReceptionInsurancePage({ data, onCreateInsuranceName, onDeleteIn
               <option value={45}>45</option>
             </select>
           </label>
+          <button className="payments-ledger-reset" onClick={() => { setSearch(''); setStatusFilter('all'); setTypeFilter('all'); setStartDate(''); setEndDate(''); setRowsPerPage(15); }} type="button">Reset filters</button>
         </div>
       </section>
 

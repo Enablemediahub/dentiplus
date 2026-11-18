@@ -145,6 +145,7 @@ export function AdminStoreMonitorPage({ data, onNavigate }) {
               <option value={48}>48</option>
             </select>
           </label>
+          <button className="payments-ledger-reset" onClick={() => { setSalesSearch(''); setInventorySearch(''); setRowsPerPage(12); }} type="button">Reset filters</button>
         </div>
 
         <div className="frontdesk-command-grid">

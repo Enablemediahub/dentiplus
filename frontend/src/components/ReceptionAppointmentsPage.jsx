@@ -165,6 +165,7 @@ export function ReceptionAppointmentsPage({ appointments, onCreateAppointment, p
               <option value="all">All upcoming</option>
             </select>
           </label>
+          <button className="payments-ledger-reset" onClick={() => { setSearch(''); setUpcomingWindow('week'); }} type="button">Reset filters</button>
         </div>
 
         <div className="frontdesk-command-grid">

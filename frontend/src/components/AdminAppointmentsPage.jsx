@@ -205,6 +205,7 @@ export function AdminAppointmentsPage({ appointments, onCreateAppointment, patie
               <option value={45}>45</option>
             </select>
           </label>
+          <button className="payments-ledger-reset" onClick={() => { setSearch(''); setStatusFilter('all'); setDateFilter('week'); setRowsPerPage(15); }} type="button">Reset filters</button>
         </div>
 
         <div className="frontdesk-command-grid">

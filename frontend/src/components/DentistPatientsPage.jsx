@@ -1,5 +1,7 @@
 import React from 'react';
+import { DateInputField } from './DateInputField';
 import { PortalIcon } from './PortalIcon';
+import { displayDateToIso, normalizeDateEntry } from '../lib/dateInput';
 import { matchesSearchText } from '../lib/search';
 
 function formatPhoneNumber(value) {
@@ -359,11 +361,47 @@ function ClinicalWorkspaceModal({
   savingPrescription,
   setActiveTab,
 }) {
+  const [recordSearch, setRecordSearch] = React.useState('');
+  const [recordDateFrom, setRecordDateFrom] = React.useState('');
+  const [recordDateTo, setRecordDateTo] = React.useState('');
+  const [recordRowsPerPage, setRecordRowsPerPage] = React.useState(15);
+  const [recordPage, setRecordPage] = React.useState(1);
+
+  React.useEffect(() => {
+    setRecordPage(1);
+  }, [recordSearch, recordDateFrom, recordDateTo, recordRowsPerPage, patient?.id]);
+
   if (!patient) {
     return null;
   }
 
   const latestMedicalRecord = medicalRecords[0] ?? null;
+  const recordFrom = displayDateToIso(recordDateFrom);
+  const recordTo = displayDateToIso(recordDateTo);
+  const filteredMedicalRecords = medicalRecords.filter((record) => {
+    const visitDate = String(record.visitDate ?? '').slice(0, 10);
+    const matchesDate = (!recordDateFrom || (recordFrom && visitDate >= recordFrom))
+      && (!recordDateTo || (recordTo && visitDate <= recordTo));
+    const searchable = [
+      record.visitDateLabel,
+      record.dentistName,
+      record.presentingComplaint,
+      record.historyPresentingComplaint,
+      record.examinationFindings,
+      record.investigations,
+      record.diagnosis,
+      record.treatmentDone,
+      record.treatmentPlan,
+      record.notes,
+    ].join(' ');
+    return matchesDate && matchesSearchText(searchable, recordSearch);
+  });
+  const recordTotalPages = Math.max(1, Math.ceil(filteredMedicalRecords.length / recordRowsPerPage));
+  const currentRecordPage = clampPage(recordPage, recordTotalPages);
+  const paginatedMedicalRecords = filteredMedicalRecords.slice(
+    (currentRecordPage - 1) * recordRowsPerPage,
+    currentRecordPage * recordRowsPerPage,
+  );
   const medicalHistoryReference = latestMedicalRecord
     ? [
         latestMedicalRecord.diagnosis,
@@ -422,9 +460,34 @@ function ClinicalWorkspaceModal({
 
           {activeTab === 'medical-records' ? (
             <div className="workspace-history-list">
+              <div className="reception-filter-strip">
+                <label className="field-block reception-inline-field reception-search-field">
+                  <span>Search medical records</span>
+                  <PortalIcon className="reception-search-icon" name="search" />
+                  <input onChange={(event) => setRecordSearch(event.target.value)} placeholder="Date, dentist, diagnosis, treatment, notes..." type="text" value={recordSearch} />
+                </label>
+                <label className="field-block reception-inline-field">
+                  <span>Visit date from</span>
+                  <DateInputField name="record_date_from" onChange={(event) => setRecordDateFrom(normalizeDateEntry(event.target.value))} placeholder="dd/mm/yyyy" value={recordDateFrom} />
+                </label>
+                <label className="field-block reception-inline-field">
+                  <span>Visit date to</span>
+                  <DateInputField name="record_date_to" onChange={(event) => setRecordDateTo(normalizeDateEntry(event.target.value))} placeholder="dd/mm/yyyy" value={recordDateTo} />
+                </label>
+                <label className="field-block reception-inline-field">
+                  <span>Rows per page</span>
+                  <select onChange={(event) => setRecordRowsPerPage(Number(event.target.value))} value={recordRowsPerPage}>
+                    <option value={10}>10</option>
+                    <option value={15}>15</option>
+                    <option value={30}>30</option>
+                  </select>
+                </label>
+                <button className="payments-ledger-reset" onClick={() => { setRecordSearch(''); setRecordDateFrom(''); setRecordDateTo(''); setRecordRowsPerPage(15); }} type="button">Reset filters</button>
+              </div>
               {loadingMedical ? <p>Loading medical records...</p> : null}
               {!loadingMedical && !medicalRecords.length ? <p>No medical records found for this patient yet.</p> : null}
-              {!loadingMedical && medicalRecords.map((record) => (
+              {!loadingMedical && medicalRecords.length > 0 && !filteredMedicalRecords.length ? <p>No medical records match the current filters.</p> : null}
+              {!loadingMedical && paginatedMedicalRecords.map((record) => (
                 <article className="workspace-form-section workspace-history-record" key={`medical-record-${record.id}`}>
                   <div className="panel-heading workspace-history-record__header">
                     <div>
@@ -462,6 +525,17 @@ function ClinicalWorkspaceModal({
                   </div>
                 </article>
               ))}
+              {!loadingMedical && filteredMedicalRecords.length > 0 ? (
+                <div className="table-pagination">
+                  <span className="table-counter">
+                    Showing {(currentRecordPage - 1) * recordRowsPerPage + 1} - {Math.min(currentRecordPage * recordRowsPerPage, filteredMedicalRecords.length)} of {filteredMedicalRecords.length}
+                  </span>
+                  <div className="reception-action-row">
+                    <button className="ghost-button secondary-action--compact" disabled={currentRecordPage <= 1} onClick={() => setRecordPage((page) => Math.max(1, page - 1))} type="button">Previous</button>
+                    <button className="ghost-button secondary-action--compact" disabled={currentRecordPage >= recordTotalPages} onClick={() => setRecordPage((page) => Math.min(recordTotalPages, page + 1))} type="button">Next</button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -742,6 +816,9 @@ export function DentistPatientsPage({
   patients,
 }) {
   const [search, setSearch] = React.useState('');
+  const [registeredFrom, setRegisteredFrom] = React.useState('');
+  const [registeredTo, setRegisteredTo] = React.useState('');
+  const [rowsPerPage, setRowsPerPage] = React.useState(15);
   const [page, setPage] = React.useState(1);
   const [activePatient, setActivePatient] = React.useState(null);
   const [activeTab, setActiveTab] = React.useState('medical-records');
@@ -772,18 +849,23 @@ export function DentistPatientsPage({
     date_prescribed: '',
     entries: [emptyPrescriptionEntry()],
   });
-  const rowsPerPage = 15;
-
   const config = VIEW_CONFIG[currentView] ?? VIEW_CONFIG.patients;
   const patientItems = patients?.items ?? [];
-  const filteredPatients = patientItems.filter((item) => matchesSearch(item, search));
+  const fromValue = displayDateToIso(registeredFrom);
+  const toValue = displayDateToIso(registeredTo);
+  const filteredPatients = patientItems.filter((item) => {
+    const createdAt = String(item.createdAt ?? '').slice(0, 10);
+    const matchesRegistrationDate = (!registeredFrom || (fromValue && createdAt >= fromValue))
+      && (!registeredTo || (toValue && createdAt <= toValue));
+    return matchesRegistrationDate && matchesSearch(item, search);
+  });
   const totalPages = Math.max(1, Math.ceil(filteredPatients.length / rowsPerPage));
   const currentPage = clampPage(page, totalPages);
   const paginatedPatients = filteredPatients.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
 
   React.useEffect(() => {
     setPage(1);
-  }, [search]);
+  }, [search, registeredFrom, registeredTo, rowsPerPage]);
 
   React.useEffect(() => {
     setPage((current) => clampPage(current, totalPages));
@@ -1048,6 +1130,23 @@ export function DentistPatientsPage({
               value={search}
             />
           </label>
+          <label className="field-block reception-inline-field">
+            <span>Registered from</span>
+            <DateInputField name="registered_from" onChange={(event) => setRegisteredFrom(normalizeDateEntry(event.target.value))} placeholder="dd/mm/yyyy" value={registeredFrom} />
+          </label>
+          <label className="field-block reception-inline-field">
+            <span>Registered to</span>
+            <DateInputField name="registered_to" onChange={(event) => setRegisteredTo(normalizeDateEntry(event.target.value))} placeholder="dd/mm/yyyy" value={registeredTo} />
+          </label>
+          <label className="field-block reception-inline-field">
+            <span>Rows per page</span>
+            <select onChange={(event) => setRowsPerPage(Number(event.target.value))} value={rowsPerPage}>
+              <option value={15}>15</option>
+              <option value={30}>30</option>
+              <option value={45}>45</option>
+            </select>
+          </label>
+          <button className="payments-ledger-reset" onClick={() => { setSearch(''); setRegisteredFrom(''); setRegisteredTo(''); setRowsPerPage(15); }} type="button">Reset filters</button>
         </div>
       </section>
 

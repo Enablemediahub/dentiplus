@@ -1700,6 +1700,158 @@ button {
   margin-bottom: 20px;
 }
 
+.payments-ledger-controls {
+  display: grid;
+  grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(100px, 1fr)) minmax(64px, 0.5fr) minmax(112px, max-content);
+  align-items: end;
+  gap: 10px;
+  margin: 0 0 18px;
+  padding: 16px;
+  border: 1px solid rgba(52, 211, 153, 0.25);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.045));
+}
+
+.payments-ledger-controls label {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.payments-ledger-controls label > span:first-child {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.payments-ledger-controls input,
+.payments-ledger-controls select {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  border-radius: 10px;
+  background-color: #f5fff8;
+  color: #173323;
+}
+
+.payments-ledger-controls input::placeholder {
+  color: #557064;
+  opacity: 1;
+}
+
+.payments-ledger-controls select option {
+  background: #f5fff8;
+  color: #173323;
+}
+
+.payments-ledger-search__input {
+  position: relative;
+  display: block;
+}
+
+.payments-ledger-search__input input {
+  padding: 0 14px 0 42px;
+}
+
+.payments-ledger-search__input .reception-search-icon {
+  bottom: 13px;
+  color: #34d399;
+}
+
+.payments-ledger-controls input:focus,
+.payments-ledger-controls select:focus {
+  outline: 2px solid rgba(52, 211, 153, 0.32);
+  border-color: #34d399;
+}
+
+.payments-ledger-reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 112px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid rgba(52, 211, 153, 0.42);
+  border-radius: 10px;
+  background: rgba(16, 185, 129, 0.14);
+  color: #6ee7b7;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+
+.payments-ledger-reset:hover {
+  transform: translateY(-1px);
+  border-color: #34d399;
+  background: rgba(16, 185, 129, 0.24);
+}
+
+.reception-filter-strip > .payments-ledger-reset {
+  grid-column: span 2;
+  justify-self: stretch;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Shared search field treatment across pages */
+.reception-search-field input,
+.database-table-search input,
+.database-filter-row input {
+  border-color: rgba(22, 132, 90, 0.34);
+  background: #f5fff8;
+  color: #173323;
+}
+
+.reception-search-field input::placeholder,
+.database-table-search input::placeholder,
+.database-filter-row input::placeholder {
+  color: #557064;
+  opacity: 1;
+}
+
+.reception-search-field .reception-search-icon {
+  color: #16845a;
+}
+
+.reception-search-field input:focus,
+.database-table-search input:focus,
+.database-filter-row input:focus {
+  outline: 2px solid rgba(22, 132, 90, 0.24);
+  border-color: #16845a;
+  box-shadow: 0 0 0 3px rgba(22, 132, 90, 0.1);
+}
+
+:root[data-theme='light'] .reception-search-field input,
+:root[data-theme='light'] .database-table-search input,
+:root[data-theme='light'] .database-filter-row input {
+  border-color: rgba(22, 132, 90, 0.34);
+  background: #f5fff8;
+  color: #173323;
+}
+
+.reception-filter-strip .reception-walkin-search input,
+:root[data-theme='light'] .reception-filter-strip .reception-walkin-search input {
+  border: 1px solid #36a875;
+  background: #e6fff0;
+  color: #123b28;
+  box-shadow: inset 0 0 0 1px rgba(54, 168, 117, 0.08);
+}
+
+.reception-filter-strip .reception-walkin-search input::placeholder {
+  color: #416c56;
+  opacity: 1;
+}
+
+.reception-filter-strip .reception-walkin-search .reception-search-icon {
+  color: #16845a;
+}
+
 .reception-toolbar-card .reception-filter-strip + .frontdesk-command-grid {
   margin-top: 20px;
 }
@@ -1709,6 +1861,17 @@ button {
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 14px;
   align-items: end;
+  padding: 16px;
+  border: 1px solid rgba(52, 211, 153, 0.25);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.045));
+}
+
+.database-filter-row {
+  padding: 16px;
+  border: 1px solid rgba(52, 211, 153, 0.25);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.045));
 }
 
 .reception-inline-field {
@@ -1738,6 +1901,35 @@ button {
 .reception-inline-field input,
 .reception-inline-field select {
   width: 100%;
+  min-height: 44px;
+  border: 1px solid rgba(22, 132, 90, 0.34);
+  border-radius: 10px;
+  background: #f5fff8;
+  color: #173323;
+}
+
+.reception-inline-field input::placeholder {
+  color: #557064;
+  opacity: 1;
+}
+
+.reception-inline-field input:focus,
+.reception-inline-field select:focus {
+  outline: 2px solid rgba(22, 132, 90, 0.24);
+  border-color: #16845a;
+  box-shadow: 0 0 0 3px rgba(22, 132, 90, 0.1);
+}
+
+:root[data-theme='light'] .reception-inline-field input,
+:root[data-theme='light'] .reception-inline-field select {
+  border-color: rgba(22, 132, 90, 0.34);
+  background: #f5fff8;
+  color: #173323;
+}
+
+.reception-inline-field select option {
+  background: #f5fff8;
+  color: #173323;
 }
 
 .reception-inline-field input {
@@ -2847,6 +3039,31 @@ button {
   gap: 16px;
 }
 
+.procedure-charge-line-grid {
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  align-items: start;
+  gap: 18px;
+}
+
+.procedure-charge-line-grid > .procedure-charge-field {
+  min-width: 0;
+}
+
+.procedure-charge-line-grid input,
+.procedure-charge-line-grid select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.procedure-charge-default {
+  display: block;
+  margin-top: 7px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
 .assign-patient-modal .form-grid > .field-block {
   min-width: 0;
 }
@@ -3023,6 +3240,10 @@ button {
   .workspace-tab-row {
     grid-template-columns: 1fr;
   }
+
+  .payments-ledger-controls {
+    grid-template-columns: minmax(180px, 2fr) repeat(2, minmax(100px, 1fr));
+  }
 }
 
 @media (max-width: 920px) {
@@ -3111,6 +3332,23 @@ button {
 
   .reception-filter-strip {
     grid-template-columns: 1fr;
+  }
+
+  .reception-filter-strip > .payments-ledger-reset {
+    grid-column: 1 / -1;
+  }
+
+  .payments-ledger-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .payments-ledger-search {
+    grid-column: 1 / -1;
+  }
+
+  .payments-ledger-reset {
+    width: 100%;
+    min-width: 0;
   }
 
   .reception-inline-field,

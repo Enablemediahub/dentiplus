@@ -182,6 +182,8 @@ export function ReceptionPatientDatabasePage({
   const [search, setSearch] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState('all');
   const [typeFilter, setTypeFilter] = React.useState('all');
+  const [startDate, setStartDate] = React.useState('');
+  const [endDate, setEndDate] = React.useState('');
   const [rowsPerPage, setRowsPerPage] = React.useState(15);
   const [page, setPage] = React.useState(1);
   const [activePatient, setActivePatient] = React.useState(null);
@@ -191,14 +193,20 @@ export function ReceptionPatientDatabasePage({
   const [deleting, setDeleting] = React.useState(false);
 
   const items = patients?.items ?? [];
-  const filteredItems = items.filter((item) => matchesSearch(item, search) && matchesFilters(item, statusFilter, typeFilter));
+  const filteredItems = items.filter((item) => {
+    const created = String(item.createdAt ?? '').slice(0, 10);
+    const from = displayDateToIso(startDate);
+    const to = displayDateToIso(endDate);
+    const dateMatch = (!startDate || (from && created >= from)) && (!endDate || (to && created <= to));
+    return dateMatch && matchesSearch(item, search) && matchesFilters(item, statusFilter, typeFilter);
+  });
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / rowsPerPage));
   const currentPage = clampPage(page, totalPages);
   const paginatedItems = filteredItems.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
 
   React.useEffect(() => {
     setPage(1);
-  }, [search, statusFilter, typeFilter, rowsPerPage]);
+  }, [search, statusFilter, typeFilter, startDate, endDate, rowsPerPage]);
 
   React.useEffect(() => {
     setPage((current) => clampPage(current, totalPages));
@@ -335,6 +343,14 @@ export function ReceptionPatientDatabasePage({
             </select>
           </label>
           <label className="field-block reception-inline-field">
+            <span>Registered from</span>
+            <DateInputField name="registered_from" onChange={(event) => setStartDate(normalizeDateEntry(event.target.value))} placeholder="dd/mm/yyyy" value={startDate} />
+          </label>
+          <label className="field-block reception-inline-field">
+            <span>Registered to</span>
+            <DateInputField name="registered_to" onChange={(event) => setEndDate(normalizeDateEntry(event.target.value))} placeholder="dd/mm/yyyy" value={endDate} />
+          </label>
+          <label className="field-block reception-inline-field">
             <span>Rows per page</span>
             <select onChange={(event) => setRowsPerPage(Number(event.target.value))} value={rowsPerPage}>
               <option value={15}>15</option>
@@ -342,6 +358,7 @@ export function ReceptionPatientDatabasePage({
               <option value={45}>45</option>
             </select>
           </label>
+          <button className="payments-ledger-reset" onClick={() => { setSearch(''); setStatusFilter('all'); setTypeFilter('all'); setStartDate(''); setEndDate(''); setRowsPerPage(15); }} type="button">Reset filters</button>
         </div>
       </section>
 

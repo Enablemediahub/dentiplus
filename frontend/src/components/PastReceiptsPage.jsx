@@ -1,5 +1,7 @@
 import React from 'react';
+import { DateInputField } from './DateInputField';
 import { PortalIcon } from './PortalIcon';
+import { displayDateToIso, normalizeDateEntry } from '../lib/dateInput';
 import { matchesSearchText } from '../lib/search';
 
 function formatCurrency(value) {
@@ -240,6 +242,8 @@ function ReceiptPreviewModal({ isOpen, onClose, onPrint, receipt }) {
 
 export function PastReceiptsPage({ billing, onLoadReceipt }) {
   const [search, setSearch] = React.useState('');
+  const [startDate, setStartDate] = React.useState('');
+  const [endDate, setEndDate] = React.useState('');
   const [page, setPage] = React.useState(1);
   const [rowsPerPage, setRowsPerPage] = React.useState(15);
   const [receiptLoading, setReceiptLoading] = React.useState(false);
@@ -248,7 +252,11 @@ export function PastReceiptsPage({ billing, onLoadReceipt }) {
   const history = billing?.history ?? [];
 
   const filteredHistory = history.filter((item) => {
-    return matchesSearchText([
+    const date = String(item.paymentDate ?? '').slice(0, 10);
+    const from = displayDateToIso(startDate);
+    const to = displayDateToIso(endDate);
+    const dateMatch = (!startDate || (from && date >= from)) && (!endDate || (to && date <= to));
+    return dateMatch && matchesSearchText([
       item.receiptNumber,
       item.bill,
       item.patientName,
@@ -271,7 +279,7 @@ export function PastReceiptsPage({ billing, onLoadReceipt }) {
 
   React.useEffect(() => {
     setPage(1);
-  }, [rowsPerPage, search]);
+  }, [rowsPerPage, search, startDate, endDate]);
 
   React.useEffect(() => {
     setPage((current) => clampPage(current, totalPages));
@@ -308,6 +316,14 @@ export function PastReceiptsPage({ billing, onLoadReceipt }) {
             <input onChange={(event) => setSearch(event.target.value)} placeholder="Receipt, patient, bill, method, date..." type="text" value={search} />
           </label>
           <label className="field-block reception-inline-field">
+            <span>From</span>
+            <DateInputField name="start_date" onChange={(event) => setStartDate(normalizeDateEntry(event.target.value))} placeholder="dd/mm/yyyy" value={startDate} />
+          </label>
+          <label className="field-block reception-inline-field">
+            <span>To</span>
+            <DateInputField name="end_date" onChange={(event) => setEndDate(normalizeDateEntry(event.target.value))} placeholder="dd/mm/yyyy" value={endDate} />
+          </label>
+          <label className="field-block reception-inline-field">
             <span>Rows per page</span>
             <select onChange={(event) => setRowsPerPage(Number(event.target.value))} value={rowsPerPage}>
               <option value={15}>15</option>
@@ -315,6 +331,7 @@ export function PastReceiptsPage({ billing, onLoadReceipt }) {
               <option value={45}>45</option>
             </select>
           </label>
+          <button className="payments-ledger-reset" onClick={() => { setSearch(''); setStartDate(''); setEndDate(''); setRowsPerPage(15); }} type="button">Reset filters</button>
         </div>
       </section>
 

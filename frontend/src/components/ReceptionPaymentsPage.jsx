@@ -470,6 +470,7 @@ function FrontdeskBillingModal({ isOpen, onClose, onSubmit, patients }) {
                 <PortalIcon className="reception-search-icon" name="search" />
                 <input onChange={(event) => setSearch(event.target.value)} placeholder="Patient, folder, phone..." type="text" value={search} />
               </label>
+              <button className="payments-ledger-reset" onClick={() => setSearch('')} type="button">Reset filters</button>
             </div>
             <div className="table-wrap">
               <table className="data-table">
@@ -1085,6 +1086,7 @@ export function ReceptionPaymentsPage({
 }) {
   const todayDate = React.useMemo(() => getTodayDateValue(), []);
   const [search, setSearch] = React.useState('');
+  const [historySearch, setHistorySearch] = React.useState('');
   const [methodFilter, setMethodFilter] = React.useState('all');
   const [billTypeFilter, setBillTypeFilter] = React.useState('all');
   const [statusFilter, setStatusFilter] = React.useState('all');
@@ -1117,7 +1119,7 @@ export function ReceptionPaymentsPage({
 
     return matchesMethod
       && inDateRange(item.paymentDate, startDate, endDate)
-      && matchesHistorySearch(item, search);
+      && matchesHistorySearch(item, historySearch);
   });
   const rangeInsuranceTotal = insuranceItems.reduce((sum, item) => (
     inDateRange(item.createdAt, startDate, endDate) ? sum + Number(item.coveredAmount ?? 0) : sum
@@ -1206,7 +1208,7 @@ export function ReceptionPaymentsPage({
 
   React.useEffect(() => {
     setHistoryPage(1);
-  }, [search, methodFilter, historyRowsPerPage, startDate, endDate]);
+  }, [historySearch, methodFilter, historyRowsPerPage, startDate, endDate]);
 
   React.useEffect(() => {
     setHistoryPage((current) => clampPage(current, historyTotalPages));
@@ -1330,20 +1332,9 @@ export function ReceptionPaymentsPage({
 
         <div className="reception-filter-strip reception-filter-strip--ledger">
           <label className="field-block reception-inline-field reception-search-field">
-            <span>Search sales page</span>
+            <span>Search open bills</span>
             <PortalIcon className="reception-search-icon" name="search" />
-            <input onChange={(event) => setSearch(event.target.value)} placeholder="Receipt, bill, patient, charge, dentist, method..." type="text" value={search} />
-          </label>
-          <label className="field-block reception-inline-field">
-            <span>Method</span>
-            <select onChange={(event) => setMethodFilter(event.target.value)} value={methodFilter}>
-              <option value="all">All methods</option>
-              <option value="cash">Cash</option>
-              <option value="mobile_money">Mobile Money</option>
-              <option value="paystack">Paystack</option>
-              <option value="bank">Bank</option>
-              <option value="insurance">Insurance</option>
-            </select>
+            <input onChange={(event) => setSearch(event.target.value)} placeholder="Bill, patient, charge, dentist..." type="text" value={search} />
           </label>
           <label className="field-block reception-inline-field">
             <span>Bill type</span>
@@ -1362,14 +1353,6 @@ export function ReceptionPaymentsPage({
             </select>
           </label>
           <label className="field-block reception-inline-field">
-            <span>Start date</span>
-            <DateInputField name="start_date" onChange={(event) => setStartDate(normalizeDateEntry(event.target.value))} placeholder="dd/mm/yyyy" value={startDate} />
-          </label>
-          <label className="field-block reception-inline-field">
-            <span>End date</span>
-            <DateInputField name="end_date" onChange={(event) => setEndDate(normalizeDateEntry(event.target.value))} placeholder="dd/mm/yyyy" value={endDate} />
-          </label>
-          <label className="field-block reception-inline-field">
             <span>Open-bill rows</span>
             <select value={billRowsPerPage} onChange={(event) => setBillRowsPerPage(Number(event.target.value))}>
               <option value={15}>15</option>
@@ -1377,14 +1360,7 @@ export function ReceptionPaymentsPage({
               <option value={45}>45</option>
             </select>
           </label>
-          <label className="field-block reception-inline-field">
-            <span>Sales rows</span>
-            <select value={historyRowsPerPage} onChange={(event) => setHistoryRowsPerPage(Number(event.target.value))}>
-              <option value={15}>15</option>
-              <option value={30}>30</option>
-              <option value={45}>45</option>
-            </select>
-          </label>
+          <button className="payments-ledger-reset" onClick={() => { setSearch(''); setBillTypeFilter('all'); setStatusFilter('all'); setBillRowsPerPage(15); }} type="button">Reset filters</button>
         </div>
 
         <div className="frontdesk-command-grid">
@@ -1420,6 +1396,60 @@ export function ReceptionPaymentsPage({
           <span className="table-counter">
             {filteredHistory.length} results | Page {currentHistoryPage} of {historyTotalPages}
           </span>
+        </div>
+        <div className="payments-ledger-controls">
+          <label className="payments-ledger-search">
+            <span>Search sales</span>
+            <span className="payments-ledger-search__input">
+              <PortalIcon className="reception-search-icon" name="search" />
+              <input
+                onChange={(event) => setHistorySearch(event.target.value)}
+                placeholder="Receipt, patient, bill, method..."
+                type="search"
+                value={historySearch}
+              />
+            </span>
+          </label>
+          <label className="payments-ledger-control">
+            <span>Payment method</span>
+            <select onChange={(event) => setMethodFilter(event.target.value)} value={methodFilter}>
+              <option value="all">All methods</option>
+              <option value="cash">Cash</option>
+              <option value="mobile_money">Mobile Money</option>
+              <option value="paystack">Card / Paystack</option>
+              <option value="bank">Bank</option>
+              <option value="insurance">Insurance</option>
+            </select>
+          </label>
+          <label className="payments-ledger-control">
+            <span>From</span>
+            <DateInputField name="start_date" onChange={(event) => setStartDate(normalizeDateEntry(event.target.value))} placeholder="dd/mm/yyyy" value={startDate} />
+          </label>
+          <label className="payments-ledger-control">
+            <span>To</span>
+            <DateInputField name="end_date" onChange={(event) => setEndDate(normalizeDateEntry(event.target.value))} placeholder="dd/mm/yyyy" value={endDate} />
+          </label>
+          <label className="payments-ledger-control payments-ledger-rows">
+            <span>Rows</span>
+            <select value={historyRowsPerPage} onChange={(event) => setHistoryRowsPerPage(Number(event.target.value))}>
+              <option value={15}>15</option>
+              <option value={30}>30</option>
+              <option value={45}>45</option>
+            </select>
+          </label>
+          <button
+            className="payments-ledger-reset"
+            onClick={() => {
+              setHistorySearch('');
+              setMethodFilter('all');
+              setStartDate('');
+              setEndDate('');
+              setHistoryRowsPerPage(15);
+            }}
+            type="button"
+          >
+            Reset filters
+          </button>
         </div>
         <div className="table-wrap">
           <table className="data-table">

@@ -456,6 +456,7 @@ export function ReceptionExpensesPage({ data, onCreateExpense, onDeleteExpense, 
               <option value={45}>45</option>
             </select>
           </label>
+          <button className="payments-ledger-reset" onClick={() => { setSearch(''); setCategoryFilter('all'); setStartDate(''); setEndDate(''); setRowsPerPage(15); }} type="button">Reset filters</button>
         </div>
       </section>
 

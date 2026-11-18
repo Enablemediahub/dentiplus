@@ -653,18 +653,19 @@ export function AdminDatabasePage({
                   Search
                 </button>
                 <button
-                  className="ghost-button"
+                  className="payments-ledger-reset"
                   onClick={() => {
                     setSearch('');
                     setPatientSearch('');
                     setDateFrom('');
                     setDateTo('');
                     setDateColumn(dateColumns[0] ?? '');
+                    setRowsPerPage(25);
                     setPage(1);
                   }}
                   type="button"
                 >
-                  Clear filters
+                  Reset filters
                 </button>
               </div>
             </form>

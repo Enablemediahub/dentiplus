@@ -31,6 +31,7 @@ final class DashboardController extends Controller
         $todayRevenue = $salesSummary['sales_total'];
         $paymentBreakdown = $salesSummary['payment_breakdown'];
         $todayInsurance = $this->todayInsuranceTotal($pdo, $role, $staffId, $branch);
+        $paymentBreakdown['insurance'] = $todayInsurance;
         $salesPlusInsurance = $todayRevenue + $todayInsurance;
         $expensesSummary = $this->todayExpensesSummary($pdo, $role, $staffId, $branch);
         $expenses = $expensesSummary['total'];

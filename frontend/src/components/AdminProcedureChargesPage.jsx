@@ -53,7 +53,7 @@ function ProcedureModal({ deleting, feedback, feedbackType, form, isOpen, onChan
 
           <div className="form-grid">
             <label className="field-block">
-              <span>Default charge</span>
+              <span>Standard charge</span>
               <input min="0" name="charge" onChange={onChange} required step="0.01" type="number" value={form.charge} />
             </label>
 
@@ -247,6 +247,7 @@ export function AdminProcedureChargesPage({
               <option value={45}>45</option>
             </select>
           </label>
+          <button className="payments-ledger-reset" onClick={() => { setSearch(''); setRowsPerPage(15); }} type="button">Reset filters</button>
         </div>
 
         <div className="frontdesk-command-grid">
@@ -288,7 +289,7 @@ export function AdminProcedureChargesPage({
             <thead>
               <tr>
                 <th>Procedure</th>
-                <th>Default charge</th>
+                <th>Standard charge</th>
                 <th>Min charge</th>
                 <th>Max charge</th>
                 <th>Range width</th>
